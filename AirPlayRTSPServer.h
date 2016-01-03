@@ -28,7 +28,13 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #include <DigestAuthentication.hh>
 #endif
 
-class AirPlayRTSPServer: public GenericMediaServer {
+#include <thread>
+#include <openssl\rsa.h>
+
+class CUdpSocket;
+
+class AirPlayRTSPServer: public GenericMediaServer 
+{
 public:
   static AirPlayRTSPServer* createNew(UsageEnvironment& env, Port ourPort = 554,
 			       UserAuthenticationDatabase* authDatabase = NULL,
@@ -95,6 +101,8 @@ protected:
       // called only by createNew();
   virtual ~AirPlayRTSPServer();
 
+  bool LoadAirPortExpressKey();
+  
   virtual char const* allowedCommandNames(); // used to implement "AirPlayRTSPClientConnection::handleCmd_OPTIONS()"
   virtual Boolean weImplementREGISTER(char const* proxyURLSuffix, char*& responseStr);
       // used to implement "AirPlayRTSPClientConnection::handleCmd_REGISTER()"
@@ -149,6 +157,7 @@ public: // should be protected, but some old compilers complain otherwise
     // Make the handler functions for each command virtual, to allow subclasses to reimplement them, if necessary:
     virtual void handleCmd_OPTIONS();
         // You probably won't need to subclass/reimplement this function; reimplement "RTSPServer::allowedCommandNames()" instead.
+	virtual void handleCmd_ANNOUNCE(char const* fullRequestStr);
     virtual void handleCmd_GET_PARAMETER(char const* fullRequestStr); // when operating on the entire server
     virtual void handleCmd_SET_PARAMETER(char const* fullRequestStr); // when operating on the entire server
     virtual void handleCmd_DESCRIBE(char const* urlPreSuffix, char const* urlSuffix, char const* fullRequestStr);
@@ -156,6 +165,13 @@ public: // should be protected, but some old compilers complain otherwise
 				    Boolean reuseConnection, Boolean deliverViaTCP, char const* proxyURLSuffix);
         // You probably won't need to subclass/reimplement this function;
         //     reimplement "AirPlayRTSPServer::weImplementREGISTER()" and "AirPlayRTSPServer::implementCmd_REGISTER()" instead.
+
+	virtual void handleCmd_SETUP(char const* fullRequestStr);
+	virtual void handleCmd_RECORD(char const* fullRequestStr);
+	virtual void handleCmd_FLUSH(char const* fullRequestStr);
+	bool DecryptAudio(unsigned char* pEncBytes, int len);
+
+
     virtual void handleCmd_bad();
     virtual void handleCmd_notSupported();
     virtual void handleCmd_notFound();
@@ -199,6 +215,17 @@ public: // should be protected, but some old compilers complain otherwise
     Authenticator fCurrentAuthenticator; // used if access control is needed
     char* fOurSessionCookie; // used for optional RTSP-over-HTTP tunneling
     unsigned fBase64RemainderCount; // used for optional RTSP-over-HTTP tunneling (possible values: 0,1,2,3)
+
+	// RDOK
+	void AudioThread();
+	CUdpSocket* _pAudioSocket;
+	CUdpSocket* _pControlSocket;
+	CUdpSocket* _pTimingSocket;
+
+	std::thread* _pAudioThread;
+	bool _stopAudioThread;
+	unsigned char _aesKey[16]; // 128 bit AES CBC key for audio decrypt
+	unsigned char _aesIv[16];
   };
 
   // The state of an individual client session (using one or more sequential TCP connections) handled by a RTSP server:
@@ -226,6 +253,8 @@ public: // should be protected, but some old compilers complain otherwise
 					 ServerMediaSubsession* subsession, char const* fullRequestStr);
     virtual void handleCmd_SET_PARAMETER(AirPlayRTSPClientConnection* ourClientConnection,
 					 ServerMediaSubsession* subsession, char const* fullRequestStr);
+	//virtual void handleCmd_RECORD(AirPlayRTSPClientConnection* ourClientConnection,
+	//	ServerMediaSubsession* subsession, char const* fullRequestStr);
   protected:
     void deleteStreamByTrack(unsigned trackNum);
     void reclaimStreamStates();
@@ -248,6 +277,7 @@ public: // should be protected, but some old compilers complain otherwise
       int tcpSocketNum;
       void* streamToken;
     } * fStreamStates;
+
   };
 
 protected: // redefined virtual functions
@@ -282,6 +312,7 @@ private:
   unsigned fRegisterRequestCounter;
   UserAuthenticationDatabase* fAuthDB;
   Boolean fAllowStreamingRTPOverTCP; // by default, True
+  RSA* _airPortExpressKey;
 };
 
 
