@@ -169,7 +169,7 @@ public: // should be protected, but some old compilers complain otherwise
 	virtual void handleCmd_SETUP(char const* fullRequestStr);
 	virtual void handleCmd_RECORD(char const* fullRequestStr);
 	virtual void handleCmd_FLUSH(char const* fullRequestStr);
-	bool DecryptAudio(unsigned char* pEncBytes, int len);
+	bool DecryptAudio(unsigned char* pEncBytes, int len, unsigned short& seq);
 
 
     virtual void handleCmd_bad();

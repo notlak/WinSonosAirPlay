@@ -1713,7 +1713,7 @@ static Boolean parsePlayNowHeader(char const* buf) {
   return True;
 }
 
-bool AirPlayRTSPServer::AirPlayRTSPClientConnection::DecryptAudio(unsigned char* pEncBytes, int len)
+bool AirPlayRTSPServer::AirPlayRTSPClientConnection::DecryptAudio(unsigned char* pEncBytes, int len, unsigned short& seq)
 {
 	const int HeaderSize = 12;
 
@@ -1745,6 +1745,8 @@ bool AirPlayRTSPServer::AirPlayRTSPClientConnection::DecryptAudio(unsigned char*
 
 	EVP_CIPHER_CTX_free(ctx);
 
+	seq = (pEncBytes[2] << 8) + pEncBytes[3];
+
 	return true;
 }
 
@@ -1762,7 +1764,8 @@ void AirPlayRTSPServer::AirPlayRTSPClientConnection::AudioThread()
 		nBytes = _pAudioSocket->Read(buffer, BufferSize);
 		if (nBytes > 0)
 		{
-			DecryptAudio((unsigned char*)buffer, nBytes);
+			unsigned short seq = 0;
+			DecryptAudio((unsigned char*)buffer, nBytes, seq);
 
 			//TRACE("Received %d bytes from Audio port\n", nBytes);
 		}
