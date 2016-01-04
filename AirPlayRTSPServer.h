@@ -31,6 +31,8 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #include <thread>
 #include <openssl\rsa.h>
 
+#include <ALACAudioTypes.h>
+
 class CUdpSocket;
 
 class AirPlayRTSPServer: public GenericMediaServer 
@@ -226,6 +228,8 @@ public: // should be protected, but some old compilers complain otherwise
 	bool _stopAudioThread;
 	unsigned char _aesKey[16]; // 128 bit AES CBC key for audio decrypt
 	unsigned char _aesIv[16];
+
+	ALACSpecificConfig _alacConfig;
   };
 
   // The state of an individual client session (using one or more sequential TCP connections) handled by a RTSP server:

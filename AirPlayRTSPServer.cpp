@@ -639,7 +639,48 @@ void AirPlayRTSPServer::AirPlayRTSPClientConnection::handleCmd_ANNOUNCE(char con
 		Base64Decode(b64AesIv.c_str(), &iv, &ivLen);
 
 		memcpy(_aesIv, iv, ivLen);
+	}
 
+	// parse the codec parameters for ALAC
+
+	pos = req.find("a=fmtp:");
+
+	if (pos != std::string::npos)
+	{
+		pos += 7;
+		len = req.find('\r', pos);
+
+		len -= pos;
+		std::string params = req.substr(pos, len);
+
+		// create magic cookie for ALAC decode
+		// ###todo: handle parameters other than those for ALAC
+
+		// format: a=fmtp:96 352 0 16 40 10 14 2 255 0 0 44100
+
+		int frameLength, compatibleVersion, bitDepth, pb, mb, kb, numChannels, maxRun, maxFrameBytes, avgBitRate, sampleRate;
+
+		int nParams = sscanf(params.c_str(), "96 %d %d %d %d %d %d %d %d %d %d %d",
+			&frameLength, &compatibleVersion, &bitDepth,
+			&pb, &mb, &kb,
+			&numChannels, &maxRun, &maxFrameBytes, &avgBitRate, &sampleRate);
+
+		ASSERT(nParams == 11);
+
+		//### check packing issues
+
+		_alacConfig.frameLength = frameLength;
+		_alacConfig.compatibleVersion = (uint8_t)compatibleVersion;
+		_alacConfig.bitDepth = (uint8_t)bitDepth;
+		_alacConfig.pb = (uint8_t)pb;
+		_alacConfig.mb = (uint8_t)mb;
+		_alacConfig.kb = (uint8_t)kb;
+		_alacConfig.numChannels = (uint8_t)numChannels;
+		_alacConfig.maxRun = (uint16_t)maxRun;
+		_alacConfig.maxFrameBytes = maxFrameBytes;
+		_alacConfig.avgBitRate = avgBitRate;
+		_alacConfig.sampleRate = sampleRate;
+					
 	}
 
 	snprintf((char*)fResponseBuffer, sizeof fResponseBuffer,
