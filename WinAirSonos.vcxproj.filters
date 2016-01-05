@@ -45,6 +45,9 @@
     <ClInclude Include="Transcoder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\libmp3lame\lame.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="WinAirSonos.cpp">

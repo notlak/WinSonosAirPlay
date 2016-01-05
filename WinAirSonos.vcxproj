@@ -91,13 +91,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>MG_ENABLE_THREADS;_CRT_SECURE_NO_WARNINGS;WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\libalac;..\openssl\include;..\live555vs\BasicUsageEnvironment\include;..\live555vs\UsageEnvironment\include;..\live555vs\groupsock\include;..\live555vs\liveMedia\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\libmp3lame;..\libalac;..\openssl\include;..\live555vs\BasicUsageEnvironment\include;..\live555vs\UsageEnvironment\include;..\live555vs\groupsock\include;..\live555vs\liveMedia\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>c:\program files\bonjour sdk\lib;..\live555vs;..\openssl\lib;..\libalac\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libeay32.lib;libalac.lib;win32\dnssd.lib;BasicUsageEnvironment\$(Platform)\$(Configuration)\libBasicUsageEnvironment.lib;UsageEnvironment\$(Platform)\$(Configuration)\libUsageEnvironment.lib;groupsock\$(Platform)\$(Configuration)\libgroupsock.lib;liveMedia\$(Platform)\$(Configuration)\liblivemedia.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>c:\program files\bonjour sdk\lib;..\live555vs;..\openssl\lib;..\libalac\$(Platform)\$(Configuration);..\libmp3lame</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libmp3lame.lib;libeay32.lib;libalac.lib;win32\dnssd.lib;BasicUsageEnvironment\$(Platform)\$(Configuration)\libBasicUsageEnvironment.lib;UsageEnvironment\$(Platform)\$(Configuration)\libUsageEnvironment.lib;groupsock\$(Platform)\$(Configuration)\libgroupsock.lib;liveMedia\$(Platform)\$(Configuration)\liblivemedia.lib</AdditionalDependencies>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -116,13 +116,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>MG_ENABLE_THREADS;_CRT_SECURE_NO_WARNINGS;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\libalac;..\live555vs\BasicUsageEnvironment\include;..\live555vs\UsageEnvironment\include;..\live555vs\groupsock\include;..\live555vs\liveMedia\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\libmp3lame;..\libalac;..\live555vs\BasicUsageEnvironment\include;..\live555vs\UsageEnvironment\include;..\live555vs\groupsock\include;..\live555vs\liveMedia\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>c:\program files\bonjour sdk\lib;..\live555vs;..\openssl\lib;..\libalac\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libeay32.lib;libalac.lib;win32\dnssd.lib;BasicUsageEnvironment\$(Platform)\$(Configuration)\libBasicUsageEnvironment.lib;UsageEnvironment\$(Platform)\$(Configuration)\libUsageEnvironment.lib;groupsock\$(Platform)\$(Configuration)\libgroupsock.lib;liveMedia\$(Platform)\$(Configuration)\liblivemedia.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>c:\program files\bonjour sdk\lib;..\live555vs;..\openssl\lib;..\libalac\$(Platform)\$(Configuration);..\libmp3lame</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libmp3lame.lib;libeay32.lib;libalac.lib;win32\dnssd.lib;BasicUsageEnvironment\$(Platform)\$(Configuration)\libBasicUsageEnvironment.lib;UsageEnvironment\$(Platform)\$(Configuration)\libUsageEnvironment.lib;groupsock\$(Platform)\$(Configuration)\libgroupsock.lib;liveMedia\$(Platform)\$(Configuration)\liblivemedia.lib</AdditionalDependencies>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -143,15 +143,15 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>MG_ENABLE_THREADS;_CRT_SECURE_NO_WARNINGS;WIN32;_WINDOWS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\libalac;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\libmp3lame;..\libalac;</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>c:\program files\bonjour sdk\lib;..\live555vs;..\openssl\lib;..\libalac\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libeay32.lib;libalac.lib;win32\dnssd.lib;BasicUsageEnvironment\$(Platform)\$(Configuration)\libBasicUsageEnvironment.lib;UsageEnvironment\$(Platform)\$(Configuration)\libUsageEnvironment.lib;groupsock\$(Platform)\$(Configuration)\libgroupsock.lib;liveMedia\$(Platform)\$(Configuration)\liblivemedia.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>c:\program files\bonjour sdk\lib;..\live555vs;..\openssl\lib;..\libalac\$(Platform)\$(Configuration);..\libmp3lame</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libmp3lame.lib;libeay32.lib;libalac.lib;win32\dnssd.lib;BasicUsageEnvironment\$(Platform)\$(Configuration)\libBasicUsageEnvironment.lib;UsageEnvironment\$(Platform)\$(Configuration)\libUsageEnvironment.lib;groupsock\$(Platform)\$(Configuration)\libgroupsock.lib;liveMedia\$(Platform)\$(Configuration)\liblivemedia.lib</AdditionalDependencies>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -172,15 +172,15 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>MG_ENABLE_THREADS;_CRT_SECURE_NO_WARNINGS;_WINDOWS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\libalac;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\libmp3lame;..\libalac;</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>c:\program files\bonjour sdk\lib;..\live555vs;..\openssl\lib;..\libalac\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>libeay32.lib;libalac.lib;win32\dnssd.lib;BasicUsageEnvironment\$(Platform)\$(Configuration)\libBasicUsageEnvironment.lib;UsageEnvironment\$(Platform)\$(Configuration)\libUsageEnvironment.lib;groupsock\$(Platform)\$(Configuration)\libgroupsock.lib;liveMedia\$(Platform)\$(Configuration)\liblivemedia.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>c:\program files\bonjour sdk\lib;..\live555vs;..\openssl\lib;..\libalac\$(Platform)\$(Configuration);..\libmp3lame</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libmp3lame.lib;libeay32.lib;libalac.lib;win32\dnssd.lib;BasicUsageEnvironment\$(Platform)\$(Configuration)\libBasicUsageEnvironment.lib;UsageEnvironment\$(Platform)\$(Configuration)\libUsageEnvironment.lib;groupsock\$(Platform)\$(Configuration)\libgroupsock.lib;liveMedia\$(Platform)\$(Configuration)\liblivemedia.lib</AdditionalDependencies>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -197,6 +197,7 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\libmp3lame\lame.h" />
     <ClInclude Include="AirPlayRTSPServer.h" />
     <ClInclude Include="mongoose.h" />
     <ClInclude Include="Resource.h" />
