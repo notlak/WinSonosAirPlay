@@ -99,7 +99,7 @@ AirPlayRTSPServer::createNew(UsageEnvironment& env, Port ourPort,
 		      unsigned reclamationSeconds) {
   int ourSocket = setUpOurSocket(env, ourPort);
   if (ourSocket == -1) return NULL;
-  
+
   return new AirPlayRTSPServer(env, ourSocket, ourPort, authDatabase, reclamationSeconds);
 }
 
@@ -1798,6 +1798,8 @@ void AirPlayRTSPServer::AirPlayRTSPClientConnection::AudioThread()
 	const int BufferSize = 2048;
 	char buffer[BufferSize];
 
+	_transcoder.Init(&_alacConfig);
+
 	while (!_stopAudioThread)
 	{
 		int nBytes;
@@ -1807,17 +1809,18 @@ void AirPlayRTSPServer::AirPlayRTSPClientConnection::AudioThread()
 		{
 			unsigned short seq = 0;
 			DecryptAudio((unsigned char*)buffer, nBytes, seq);
+			_transcoder.Write((unsigned char*)buffer + 12, nBytes - 12);
 
-			//TRACE("Received %d bytes from Audio port\n", nBytes);
+			TRACE("Received %d bytes from Audio port Seq:%d\n", nBytes, seq);
 		}
 
 		nBytes = _pControlSocket->Read(buffer, BufferSize);
-		if (nBytes > 0)
-			TRACE("Received %d bytes from Control port\n", nBytes);
+		//if (nBytes > 0)
+			//TRACE("Received %d bytes from Control port\n", nBytes);
 
 		nBytes = _pTimingSocket->Read(buffer, BufferSize);
-		if (nBytes > 0)
-			TRACE("Received %d bytes from Timing port\n", nBytes);
+		//if (nBytes > 0)
+			//TRACE("Received %d bytes from Timing port\n", nBytes);
 	}
 
 }

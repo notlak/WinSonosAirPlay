@@ -33,6 +33,8 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 
 #include <ALACAudioTypes.h>
 
+#include "Transcoder.h"
+
 class CUdpSocket;
 
 class AirPlayRTSPServer: public GenericMediaServer 
@@ -230,6 +232,7 @@ public: // should be protected, but some old compilers complain otherwise
 	unsigned char _aesIv[16];
 
 	ALACSpecificConfig _alacConfig;
+	CTranscoder _transcoder;
   };
 
   // The state of an individual client session (using one or more sequential TCP connections) handled by a RTSP server:
