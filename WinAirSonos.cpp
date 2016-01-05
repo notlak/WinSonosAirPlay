@@ -6,6 +6,7 @@
 #include "WinAirSonos.h"
 #include "WinAirSonosDlg.h"
 #include "AirPlayRTSPServer.h"
+#include "SonosInterface.h"
 
 // live555 (RTSP/RTP server) includes
 #include <BasicUsageEnvironment.hh>
@@ -259,44 +260,10 @@ BOOL CWinAirSonosApp::InitInstance()
 	// such as the name of your company or organization
 	SetRegistryKey(_T("KODR"));
 
-	
-
-	// Win crypto can't encrypt 
-	/*
-	HANDLE hPrivateKey = CreateFile(L"private.key", GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-
-	if (hPrivateKey	!= INVALID_HANDLE_VALUE)
-	{
-		const int KeyBuffLen = 2048;
-		char keyBuff[KeyBuffLen];
-		DWORD bytesRead;
-		const DWORD BinaryKeyLen = 2048;
-		char binaryKeyBuff[BinaryKeyLen];
-
-		if (ReadFile(hPrivateKey, keyBuff, KeyBuffLen, &bytesRead, nullptr) == TRUE)
-		{
-			CloseHandle(hPrivateKey);
-
-			keyBuff[bytesRead] = '\0';
-			TCHAR wKey[KeyBuffLen];
-			MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, keyBuff, bytesRead + 1, wKey, KeyBuffLen);
-
-			DWORD binaryKeyLen = 2048;
-			BYTE binaryKeyBuff[2048];
-			DWORD skip = 0, flags = 0;
-			BOOL ok = CryptStringToBinary(wKey, 0, CRYPT_STRING_ANY, binaryKeyBuff, &binaryKeyLen, &skip, &flags);
-
-			if (ok)
-			{
-				HANDLE hKey = CryptEncryptMessage()
-
-			}
-
-
-		}
-	}
-	*/
-
+	// test SonosInterface
+	SonosInterface sonos;
+	sonos.Init();
+	sonos.FindSpeakers();
 
 	const int RTSP_PORT = 50001;
 
