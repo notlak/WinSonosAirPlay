@@ -260,10 +260,7 @@ BOOL CWinAirSonosApp::InitInstance()
 	// such as the name of your company or organization
 	SetRegistryKey(_T("KODR"));
 
-	// test SonosInterface
-	SonosInterface sonos;
-	sonos.Init();
-	sonos.FindSpeakers();
+	
 
 	const int RTSP_PORT = 50001;
 
@@ -376,6 +373,17 @@ BOOL CWinAirSonosApp::InitInstance()
 		TRACE("Error: unable to register service with mdns\n");
 	
 	TXTRecordDeallocate(&txtRef);
+
+
+	// test SonosInterface
+	SonosInterface sonos;
+	sonos.Init();
+
+	std::string doc;
+	bool ok = sonos.HttpRequest("95.211.70.200", 80, "/tools/website-speed-test", doc);
+
+	//sonos.FindSpeakers();
+
 
 
 	rtspEnv->taskScheduler().doEventLoop();

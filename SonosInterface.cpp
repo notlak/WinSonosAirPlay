@@ -1,7 +1,12 @@
 #include "stdafx.h"
 #include "SonosInterface.h"
 
+#include <winsock2.h>
 #include <UPnP.h>
+
+#include <iostream>
+#include <sstream>
+#include <algorithm>
 
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
@@ -174,6 +179,8 @@ bool SonosInterface::FindSpeakers()
 		pUPnPDeviceFinder->Release();
 	}
 
+	return true;
+
 	// now the asynchronous
 
 	IUPnPDeviceFinderCallback* pUPnPDeviceFinderCallback = new CUPnPDeviceFinderCallback();
@@ -213,4 +220,135 @@ bool SonosInterface::FindSpeakers()
 	}
 
 	return hr == S_OK;
+}
+
+bool SonosInterface::HttpRequest(const char* ip, int port, const char* path, std::string& document)
+{
+	///// this should have been done by live555 stuff
+	// initialize Winsock library
+	//WSADATA wsadata;
+	//WSAStartup(MAKEWORD(2, 2), &wsadata);
+
+	bool success = false;
+
+	// prepare inet address from URL of document
+	sockaddr_in addr;
+	addr.sin_addr.s_addr = inet_addr(ip); // put here ip address of device
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(port); // put here port for connection
+
+	const int rbsize = 4096;    // internal buffer size
+	char rbuff[rbsize] = { 0 };    // internal temporary receive buffer
+	int rbshift = 0;            // index in internal buffer of current begin of free space
+	int b = 0;                    // bytes curently received
+	int tb = 0;                    // bytes totally received
+	std::string respbuff;            // response buffer
+	std::string headertail("\r\n\r\n"); // request tail
+
+	document = "";
+
+	std::ostringstream os;
+
+	os << "GET " << path << " HTTP/1.1\r\nHost: " << inet_ntoa(addr.sin_addr)
+		<< ':' << ntohs(addr.sin_port)
+		<< headertail;
+
+	// create TCP socket
+	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	
+	DWORD timeOutMs = 2000;
+	setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeOutMs, sizeof DWORD);
+
+	// connect socket
+	connect(s, (sockaddr*)&addr, sizeof(sockaddr_in));
+
+	// send request
+	b = send(s, os.str().c_str(), os.str().length(), 0);
+
+	if (b == SOCKET_ERROR)
+	{
+		int err = WSAGetLastError();
+		TRACE("Error: %d\n", err);
+	}
+
+
+	// receive response data - document
+	while ((b = recv(s, rbuff + rbshift, rbsize - rbshift, 0)) != SOCKET_ERROR)
+	{
+		TRACE("read %d bytes\n", b);
+		// finish loop if connection has been gracefully closed
+		if (b == 0)
+			break;
+
+		// sum of all received chars
+		tb += b;
+		// sum of currently received chars
+		rbshift += b;
+
+		// temporary buffer has been filled
+		// thus copy data to response buffer
+		if (rbshift == rbsize)
+		{
+			respbuff.append(rbuff, rbshift);
+
+			// reset current counter
+			rbshift = 0;
+		}
+	}
+
+	// close connection gracefully
+	shutdown(s, SD_SEND);
+	//while (int bc = recv(s, rbuff, rbsize, 0))
+		//if (bc == SOCKET_ERROR) break;
+	closesocket(s);
+
+	// analyse received data
+	if (tb > 0)
+	{
+		// copy any remaining data to response buffer
+		if (rbshift > 0)
+			respbuff.append(rbuff, rbshift);
+
+		// check response code in header
+		if (respbuff.substr(0, respbuff.find("\r\n")).find("200 OK") != std::string::npos)
+		{
+			int cntlen_comp = 0;    // computed response's content length
+			int cntlen_get = 0;        // retrieved response's content length
+			std::string::size_type pos;
+			std::string::size_type posdata = respbuff.find(headertail);
+
+			if (posdata != std::string::npos)
+			{
+				// compute content length
+				cntlen_comp = tb - (posdata + headertail.length());
+
+				if (cntlen_comp > 0)
+				{
+					if (b == 0)
+					{
+						// connection has been gracefully closed
+						// thus received data should be valid
+						cntlen_get = cntlen_comp;
+					}
+					else
+					{
+						// get content length from http header
+						// to check if number of received data is equal to number of sent data
+						std::string header = respbuff.substr(0, posdata);
+						std::transform(header.begin(), header.end(), header.begin(), tolower);
+						if ((pos = header.find("content-length:")) != std::string::npos)
+							std::istringstream(header.substr(pos, header.find("\r\n", pos)).substr(15)) >> cntlen_get;
+					}
+
+					// if number of received bytes is valid then save document content
+					if (cntlen_comp == cntlen_get)
+						document.assign(respbuff.begin() + posdata + headertail.length(), respbuff.end());
+
+					success = true;
+				}
+			}
+		}
+	}
+
+	return success;
 }
