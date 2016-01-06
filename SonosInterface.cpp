@@ -80,9 +80,28 @@ public:
 			::SysFreeString(UniqueDeviceName);
 		}
 
-		BSTR type;
-		hr = pDevice->get_Type(&type);
-		::SysFreeString(type);
+		// find the url for device info
+
+		IUPnPDeviceDocumentAccess* idoc = 0;
+
+		// URL will be stored into this variable
+		BSTR bUrl = 0;
+
+		// query for IUPnPDeviceDocumentAccess
+		hr = pDevice->QueryInterface(IID_IUPnPDeviceDocumentAccess, (void**)&idoc);
+
+		if (hr == S_OK)
+		{
+			// get URL and write to BSTR
+			idoc->GetDocumentURL(&bUrl);
+
+			// do something with retrieved URL
+
+			// on finish release resources
+			SysFreeString(bUrl);
+
+			idoc->Release();
+		}
 
 		return hr;
 	}
@@ -103,6 +122,14 @@ private:
 SonosInterface::SonosInterface()
 {
 	CoInitialize(nullptr);
+
+	std::string host, path;
+	int port;
+
+	bool ok = ParseUrl("http://192.168.0.1:1234/path", host, port, path);
+	ok = ParseUrl("http://192.168.0.1/hello/there", host, port, path);
+	ok = ParseUrl("http://192.168.0.1/bummer", host, port, path);
+	ok = ParseUrl("http://192.168.0.1", host, port, path);
 }
 
 
@@ -124,7 +151,7 @@ bool SonosInterface::FindSpeakers()
 	// first test the synchronous search
 
 	// ### AddRef ???
-
+	/*
 	IUPnPDeviceFinder* pUPnPDeviceFinder;
 	
 	hr = CoCreateInstance(CLSID_UPnPDeviceFinder, NULL, CLSCTX_INPROC_SERVER,
@@ -180,7 +207,7 @@ bool SonosInterface::FindSpeakers()
 	}
 
 	return true;
-
+	*/
 	// now the asynchronous
 
 	IUPnPDeviceFinderCallback* pUPnPDeviceFinderCallback = new CUPnPDeviceFinderCallback();
@@ -194,7 +221,8 @@ bool SonosInterface::FindSpeakers()
 		if (SUCCEEDED(hr))
 		{
 			LONG lFindData;
-			hr = pUPnPDeviceFinder->CreateAsyncFind(_bstr_t("upnp:rootdevice"), 0, pUPnPDeviceFinderCallback, &lFindData);
+
+			hr = pUPnPDeviceFinder->CreateAsyncFind(_bstr_t("urn:schemas-upnp-org:device:ZonePlayer:1"), 0, pUPnPDeviceFinderCallback, &lFindData);
 			if (SUCCEEDED(hr))
 			{
 				hr = pUPnPDeviceFinder->StartAsyncFind(lFindData);
@@ -351,4 +379,64 @@ bool SonosInterface::HttpRequest(const char* ip, int port, const char* path, std
 	}
 
 	return success;
+}
+
+bool SonosInterface::ParseUrl(const char* url, std::string& host, int& port, std::string& path)
+{
+	std::string urlStr(url);
+
+	size_t pos1 = urlStr.find("//");
+	size_t pos2;
+
+	host = "";
+	path = "";
+	port = -1; // default to no port
+
+	if (pos1 == std::string::npos)
+		return false;
+
+	pos1 += 2; // move past "//"
+
+	pos2 = urlStr.find(":", pos1);
+
+	if (pos2 != std::string::npos) // there's a port specified
+	{
+		host = urlStr.substr(pos1, pos2 - pos1).c_str();
+
+		pos1 = pos2 + 1;
+
+		pos2 = urlStr.find('/', pos1);
+
+		if (pos2 != std::string::npos)
+		{
+			port = atoi(urlStr.substr(pos1, pos2 - pos1).c_str());
+			pos1 = pos2;
+
+			path = urlStr.substr(pos1);
+		}
+		else
+		{
+			port = atoi(urlStr.substr(pos1).c_str());
+		}
+	}
+	else // no port
+	{
+		pos2 = urlStr.find('/',  pos1);
+
+		if (pos2 != std::string::npos) // a path specified
+		{
+			host = urlStr.substr(pos1, pos2 - pos1).c_str();
+
+			pos1 = pos2;
+
+			path = urlStr.substr(pos1);
+
+		}
+		else // no path specified
+		{
+			host = urlStr.substr(pos1);
+		}
+	}
+
+	return true;
 }

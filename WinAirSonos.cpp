@@ -379,11 +379,10 @@ BOOL CWinAirSonosApp::InitInstance()
 	SonosInterface sonos;
 	sonos.Init();
 
+	sonos.FindSpeakers();
+
 	std::string doc;
 	bool ok = sonos.HttpRequest("95.211.70.200", 80, "/tools/website-speed-test", doc);
-
-	//sonos.FindSpeakers();
-
 
 
 	rtspEnv->taskScheduler().doEventLoop();

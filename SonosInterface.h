@@ -16,5 +16,7 @@ public:
 
 protected:
 
+	bool ParseUrl(const char* url, std::string& host, int& port, std::string& path);
+
 };
 
