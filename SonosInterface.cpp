@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "SonosInterface.h"
+#include "tinyxml2.h"
 
 #include <winsock2.h>
 #include <UPnP.h>
@@ -12,11 +13,10 @@
 #pragma comment(lib, "oleaut32.lib")
 #pragma comment(lib, "user32.lib")
 
-
 class CUPnPDeviceFinderCallback : public IUPnPDeviceFinderCallback
 {
 public:
-	CUPnPDeviceFinderCallback() { m_lRefCount = 0; }
+	CUPnPDeviceFinderCallback(SonosInterface* pSonosInt) : m_lRefCount(0), m_pSonosInt(pSonosInt) {}
 
 	STDMETHODIMP QueryInterface(REFIID iid, LPVOID* ppvObject)
 	{
@@ -64,20 +64,32 @@ public:
 	{
 		HRESULT hr = S_OK;
 
+		std::string devUdn;
+		std::string devUrl;
+
+		bool gotUdn = false;
+		bool gotUrl = false;
+
 		//You should save pDevice so that it is accessible outside the scope of this method.
 
-		BSTR UniqueDeviceName;
-		hr = pDevice->get_UniqueDeviceName(&UniqueDeviceName);
+		_bstr_t udn;
+		hr = pDevice->get_UniqueDeviceName(&udn.GetBSTR());
+
 		if (SUCCEEDED(hr))
 		{
-			BSTR FriendlyName;
-			hr = pDevice->get_FriendlyName(&FriendlyName);
+			devUdn = udn;
+
+			gotUdn = true;
+
+			BSTR friendlyName;
+			hr = pDevice->get_FriendlyName(&friendlyName);
+
 			if (SUCCEEDED(hr))
 			{
-				TRACE("Device Added: udn: %S, name: %S\n", FriendlyName, UniqueDeviceName);
-				::SysFreeString(FriendlyName);
+				TRACE("Device Added: udn: %S, name: %S\n", udn, friendlyName);
+				::SysFreeString(friendlyName);
 			}
-			::SysFreeString(UniqueDeviceName);
+			::SysFreeString(udn.GetBSTR());
 		}
 
 		// find the url for device info
@@ -85,23 +97,29 @@ public:
 		IUPnPDeviceDocumentAccess* idoc = 0;
 
 		// URL will be stored into this variable
-		BSTR bUrl = 0;
+		_bstr_t url;
 
 		// query for IUPnPDeviceDocumentAccess
 		hr = pDevice->QueryInterface(IID_IUPnPDeviceDocumentAccess, (void**)&idoc);
 
-		if (hr == S_OK)
+		if (SUCCEEDED(hr))
 		{
 			// get URL and write to BSTR
-			idoc->GetDocumentURL(&bUrl);
+			hr = idoc->GetDocumentURL(&url.GetBSTR());
 
-			// do something with retrieved URL
+			if (SUCCEEDED(hr))
+			{
+				devUrl = url;
 
-			// on finish release resources
-			SysFreeString(bUrl);
+				// on finish release resources
+				SysFreeString(url.GetBSTR());
+			}
 
 			idoc->Release();
 		}
+
+		if (gotUdn && gotUrl)
+			m_pSonosInt->UpnpDeviceAdded(udn, url);
 
 		return hr;
 	}
@@ -109,27 +127,30 @@ public:
 	STDMETHODIMP DeviceRemoved(LONG lFindData, BSTR bstrUDN)
 	{
 		TRACE("Device Removed: udn: %S", bstrUDN);
+
+		_bstr_t udn(bstrUDN);
+
+		m_pSonosInt->UpnpDeviceRemoved(udn);
+
 		return S_OK;
 	}
 
-	STDMETHODIMP SearchComplete(LONG lFindData) { return S_OK; }
+	STDMETHODIMP SearchComplete(LONG lFindData) 
+	{
+		m_pSonosInt->UpnpSearchComplete();
+		return S_OK;
+	}
 
 private:
 	LONG m_lRefCount;
-
+	SonosInterface* m_pSonosInt;
 };
 
 SonosInterface::SonosInterface()
 {
 	CoInitialize(nullptr);
 
-	std::string host, path;
-	int port;
-
-	bool ok = ParseUrl("http://192.168.0.1:1234/path", host, port, path);
-	ok = ParseUrl("http://192.168.0.1/hello/there", host, port, path);
-	ok = ParseUrl("http://192.168.0.1/bummer", host, port, path);
-	ok = ParseUrl("http://192.168.0.1", host, port, path);
+	ParseZoneTopology("need to pass xml");
 }
 
 
@@ -210,7 +231,7 @@ bool SonosInterface::FindSpeakers()
 	*/
 	// now the asynchronous
 
-	IUPnPDeviceFinderCallback* pUPnPDeviceFinderCallback = new CUPnPDeviceFinderCallback();
+	IUPnPDeviceFinderCallback* pUPnPDeviceFinderCallback = new CUPnPDeviceFinderCallback(this);
 
 	if (NULL != pUPnPDeviceFinderCallback)
 	{
@@ -439,4 +460,232 @@ bool SonosInterface::ParseUrl(const char* url, std::string& host, int& port, std
 	}
 
 	return true;
+}
+
+
+bool SonosInterface::ParseZoneTopology(const char* pXml)
+{
+	const char* pZoneXml = R"(<?xml version="1.0" ?>
+<?xml-stylesheet type="text/xsl" href="/xml/review.xsl"?>
+<ZPSupportInfo>
+<ZonePlayers>
+<ZonePlayer group='RINCON_5CAAFD2A5F9601400:1' coordinator='true' wirelessmode='1' hasconfiguredssid='1' channelfreq='2437' behindwifiext='0' wifienabled='1' location='http://192.168.1.67:1400/xml/device_description.xml' version='31.8-24090' mincompatibleversion='29.0-00000' legacycompatibleversion='24.0-00000' bootseq='4' uuid='RINCON_5CAAFD2A5F9601400'>Bedroom</ZonePlayer>
+<ZonePlayer group='RINCON_5CAAFD2A5F9601400:1' coordinator='false' wirelessmode='1' hasconfiguredssid='1' channelfreq='2437' behindwifiext='0' wifienabled='1' location='http://192.168.1.69:1400/xml/device_description.xml' version='31.8-24090' mincompatibleversion='29.0-00000' legacycompatibleversion='24.0-00000' bootseq='4' uuid='RINCON_5CAAFD2A5F9621400'>Spare</ZonePlayer>
+<ZonePlayer group='RINCON_5CAAFD2A5F9611400:1' coordinator='true' wirelessmode='1' hasconfiguredssid='1' channelfreq='2437' behindwifiext='0' wifienabled='1' location='http://192.168.1.68:1400/xml/device_description.xml' version='31.8-24090' mincompatibleversion='29.0-00000' legacycompatibleversion='24.0-00000' bootseq='4' uuid='RINCON_5CAAFD2A5F9611400'>Kitchen</ZonePlayer>
+</ZonePlayers><MediaServers><MediaServer location='192.168.1.68:3401' uuid='mobile-iPhone-3CA83CB2-36D0-4E58-AA2E-228617907F1C' version='' canbedisplayed='false' unavailable='false' type='0' ext=''>rdok-iPhone</MediaServer></MediaServers></ZPSupportInfo>
+)";
+	
+	tinyxml2::XMLDocument xmlDoc;
+
+	tinyxml2::XMLError ok = xmlDoc.Parse(pZoneXml);
+
+	if (ok != tinyxml2::XML_NO_ERROR)
+		return false;
+
+	SonosDevice dev;
+
+	tinyxml2::XMLElement* pElem = xmlDoc.FirstChildElement("ZPSupportInfo");
+
+	if (!pElem)
+		return false;
+
+	pElem = pElem->FirstChildElement("ZonePlayers");
+	
+	if (!pElem)
+		return false;
+
+	pElem = pElem->FirstChildElement("ZonePlayer");
+
+	std::string path;
+
+	SonosGroup group;
+
+	while (pElem)
+	{
+		// add device to the list, but only if it's not already there and isn't a BRIDGE or BOOST device
+
+		dev._udn = std::string("uuid:") + pElem->Attribute("uuid"); // 'uuid:' is not included in xml version but is in UPnP?
+		dev._name = pElem->GetText();
+
+		if (dev._name != "BOOST" && dev._name != "BRIDGE" && !IsDeviceInList(dev._udn.c_str()))
+		{
+			dev._group = pElem->Attribute("group");
+			dev._isCoordinator = strcmp(pElem->Attribute("coordinator"), "true") == 0;
+
+			ParseUrl(pElem->Attribute("location"), dev._address, dev._port, path);
+
+			_deviceList.push_back(dev);
+
+			// now add to group or create a new one
+
+			bool found = false;
+
+			for (std::list<SonosGroup>::iterator it = _groupList.begin(); it != _groupList.end() && !found; ++it)
+			{
+				if (dev._group == it->_name)
+				{
+					found = true;
+
+					it->_members.push_back(dev._udn);
+
+					if (dev._isCoordinator)
+						it->_coordinator = dev._udn;
+				}
+			}
+
+			if (!found)
+			{
+				group._name = dev._group;
+				group._members.push_back(dev._udn);
+				
+				if (dev._isCoordinator)
+					group._coordinator = dev._udn;
+
+				_groupList.push_back(group);
+			}
+
+		}
+
+		TRACE("group:%s name:%s coordinator:%s\n", pElem->Attribute("group"), pElem->GetText(), pElem->Attribute("coordinator"));
+		pElem = pElem->NextSiblingElement("ZonePlayer");
+	}
+
+	TRACE("Done\n");
+
+	return true;
+}
+
+
+bool SonosInterface::IsDeviceInList(const char* pUdn)
+{
+	bool found = false;
+
+	for (std::list<SonosDevice>::iterator it = _deviceList.begin(); it != _deviceList.end() && !found; it++)
+	{
+		if (it->_udn == pUdn)
+			found = true;
+	}
+
+	return found;
+}
+
+bool SonosInterface::GetDeviceByUdn(const char* pUdn, SonosDevice& device)
+{
+	bool found = false;
+
+	for (std::list<SonosDevice>::iterator it = _deviceList.begin(); it != _deviceList.end() && !found; it++)
+	{
+		if (it->_udn == pUdn)
+		{
+			device = *it;
+			found = true;
+		}
+	}
+
+	return found;
+}
+
+void SonosInterface::UpnpDeviceAdded(const char* pUdn, const char* pUrl)
+{
+	if (!IsDeviceInList(pUdn))
+	{
+		std::string host, path, xml;
+		int port;
+
+		if (ParseUrl(pUrl, host, port, path))
+		{
+			if (HttpRequest(host.c_str(), port, "/status/topology", xml))
+			{
+				ParseZoneTopology(xml.c_str());
+			}
+		}
+	}
+}
+
+void SonosInterface::UpnpDeviceRemoved(const char* pUdn)
+{
+	//### do something 
+}
+
+void SonosInterface::UpnpSearchComplete()
+{
+
+}
+
+bool SonosInterface::Play(const char* pUdn)
+{
+	HRESULT hr;
+
+	// for now get from the UDN but this may be slow so we may have to keep the IUPnPDevice pointer
+	// as the search can take 9 secs if not found
+
+	IUPnPDeviceFinder* pUPnPDeviceFinder;
+
+	hr = CoCreateInstance(CLSID_UPnPDeviceFinder, NULL, CLSCTX_INPROC_SERVER,
+		IID_IUPnPDeviceFinder, reinterpret_cast<void**>(&pUPnPDeviceFinder));
+
+	if (SUCCEEDED(hr))
+	{
+		IUPnPDevice* pDevice;
+		_bstr_t serviceName("urn:upnp-org:serviceId:AVTransport"); // may need :1 on the end
+
+		pUPnPDeviceFinder->FindByUDN(_bstr_t(pUdn), &pDevice);
+
+		if (SUCCEEDED(hr))
+		{
+			// now get the services
+
+			IUPnPServices* pServices;
+			hr = pDevice->get_Services(&pServices);
+
+			if (SUCCEEDED(hr))
+			{
+				// Retrieve the service we are interested in
+				IUPnPService * pService = NULL;
+				hr = pServices->get_Item(serviceName.GetBSTR(), &pService);
+				if (SUCCEEDED(hr))
+				{
+					// now actually invoke the Play action
+
+					SAFEARRAYBOUND  rgsaBound[1];
+					SAFEARRAY       *psa = nullptr;
+
+					rgsaBound[0].lLbound = 0;
+					rgsaBound[0].cElements = 0;
+
+					psa = SafeArrayCreate(VT_VARIANT, 1, rgsaBound);
+
+					if (psa)
+					{
+						LONG    lStatus;
+						VARIANT varInArgs;
+
+						VariantInit(&varInArgs);
+
+						varInArgs.vt = VT_VARIANT | VT_ARRAY;
+
+						V_ARRAY(&varInArgs) = psa;
+
+						pService->InvokeAction(_bstr_t("Play"), varInArgs, nullptr, nullptr);
+
+						if (SUCCEEDED(hr))
+							TRACE("Sent play\n");
+						else
+							TRACE("Error: Play() failed\n");
+
+						SafeArrayDestroy(psa);
+					}
+
+					pService->Release();
+				}
+				pServices->Release();
+			}
+		}
+
+		pDevice->Release();
+	}
+
+	pUPnPDeviceFinder->Release();
+
+	return SUCCEEDED(hr);
 }
