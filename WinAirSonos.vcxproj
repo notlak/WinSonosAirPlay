@@ -205,7 +205,9 @@
   <ItemGroup>
     <ClInclude Include="..\libmp3lame\lame.h" />
     <ClInclude Include="AirPlayRTSPServer.h" />
+    <ClInclude Include="HttpServer.h" />
     <ClInclude Include="mongoose.h" />
+    <ClInclude Include="NetworkServer.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="SonosInterface.h" />
     <ClInclude Include="stdafx.h" />
@@ -218,10 +220,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AirPlayRTSPServer.cpp" />
+    <ClCompile Include="HttpServer.cpp" />
     <ClCompile Include="mongoose.c">
       <CompileAs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">CompileAsCpp</CompileAs>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="NetworkServer.cpp" />
     <ClCompile Include="SonosInterface.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

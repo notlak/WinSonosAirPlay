@@ -7,6 +7,7 @@
 #include "WinAirSonosDlg.h"
 #include "AirPlayRTSPServer.h"
 #include "SonosInterface.h"
+#include "HttpServer.h"
 
 // live555 (RTSP/RTP server) includes
 #include <BasicUsageEnvironment.hh>
@@ -374,12 +375,17 @@ BOOL CWinAirSonosApp::InitInstance()
 	
 	TXTRecordDeallocate(&txtRef);
 
+	HttpServer httpServer;
+
+	httpServer.StartListening(nullptr, 80);
 
 	// test SonosInterface
 	SonosInterface sonos;
 	sonos.Init();
 
 	sonos.FindSpeakers();
+
+	//sonos.Test();
 
 	// test HttpRequest
 	/*std::string doc;

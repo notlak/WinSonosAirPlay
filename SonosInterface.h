@@ -50,14 +50,38 @@ public:
 	void UpnpSearchComplete();
 
 	bool Play(const char* pUdn);
+	bool Pause(const char* pUdn);
+	bool SetAvTransportUri(const char* pUdn, const char* pUri, const char* pTitle);
+
+	bool Test()
+	{
+		if (_groupList.size() > 0)
+		{
+			std::string udn(_groupList.front()._coordinator);
+			if (!udn.empty())
+			{	
+				SetAvTransportUri(udn.c_str(), "x-rincon-mp3radio://www.bbc.co.uk/radio/listen/live/r3.asx", "rdok testing");
+				/*x-rincon-mp3radio://www.bbc.co.uk/radio/listen/live/r3.asx*/
+				Play(udn.c_str());
+			}
+		}
+
+		return true;
+	}
 
 protected:
+
+	std::string FormatMetaData(const char* pTitle);
+	bool MustEscape(char ch, std::string& escaped);
 
 	bool ParseUrl(const char* url, std::string& host, int& port, std::string& path);
 	bool ParseZoneTopology(const char* pXml);
 
 	bool IsDeviceInList(const char* pUdn);
 	bool GetDeviceByUdn(const char* pUdn, SonosDevice& device);
+
+	std::string CreateSoapRequest(const char* endPoint, const char* host, int port, const char* body, const char* action);
+	bool NetworkRequest(const char* ip, int port, const char* path, std::string& document, const char* req);
 
 	std::list<SonosDevice> _deviceList;
 	std::list<SonosGroup> _groupList;
