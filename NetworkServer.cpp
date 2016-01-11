@@ -5,6 +5,7 @@
 #include <WS2tcpip.h>
 
 #include <algorithm>
+#include <sstream>
 
 NetworkServer::NetworkServer()
 	:_pListeningThread(nullptr), _stopServer(false), _listeningSocket(INVALID_SOCKET)
@@ -131,6 +132,19 @@ bool NetworkServerConnection::Initialise()
 	return true;
 }
 
+void NetworkServerConnection::GetIpAddress(unsigned char* pIpAddress)
+{
+	SOCKADDR_IN sockName;
+	int sockNameLen = sizeof(sockName);
+	getsockname(_socket, (SOCKADDR*)&sockName, &sockNameLen);
+
+	// copy IP address into apple response
+	pIpAddress[0] = sockName.sin_addr.S_un.S_un_b.s_b1;
+	pIpAddress[1] = sockName.sin_addr.S_un.S_un_b.s_b2;
+	pIpAddress[2] = sockName.sin_addr.S_un.S_un_b.s_b3;
+	pIpAddress[3] = sockName.sin_addr.S_un.S_un_b.s_b4;
+}
+
 bool NetworkServerConnection::Close()
 {
 	_closeConnection = true;
@@ -246,6 +260,24 @@ void NetworkServerConnection::Transmit(const char* pBuff, int len)
 	_txQueue.push_back(pTxBuff);
 
 	_transmitCv.notify_all();
+}
+
+void NetworkServerConnection::SendResponse(const NetworkResponse& response)
+{
+	std::string header = response.GetHeader();
+
+	int len = header.length() + response.contentLength;
+
+	char* pBuff = new char[len];
+
+	memcpy(pBuff, header.c_str(), header.length());
+
+	if (response.contentLength)
+		memcpy(pBuff + header.length(), response.pContent, response.contentLength);
+
+	Transmit(pBuff, len);
+
+	delete[] pBuff;
 }
 
 void NetworkServerConnection::TransmitThread()
@@ -404,4 +436,53 @@ bool NetworkRequest::ParseHeader(const char* pHeader)
 		contentLength = atoi(headerFieldMap["CONTENT-LENGTH"].c_str());
 
 	return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// NetworkResponse implementation
+///////////////////////////////////////////////////////////////////////////////
+
+NetworkResponse::NetworkResponse(const char* proto, int statusCode, const char* reasonPhrase)
+	: contentLength(0), pContent(nullptr), protocol(proto)
+{
+
+}
+
+NetworkResponse::~NetworkResponse()
+{
+	delete[] pContent;
+}
+
+void NetworkResponse::AddHeaderField(const char* name, const char* value)
+{
+	headerFieldMap[name] = value;
+}
+
+void NetworkResponse::AddContent(const char* pData, int len)
+{
+	pContent = new char[len];
+	memcpy(pContent, pData, len);
+	contentLength = len;
+}
+
+std::string NetworkResponse::GetHeader() const
+{
+	std::ostringstream header;
+
+	header << protocol << " " << responseCode << " " << reasonPhrase << "\r\n";
+	typedef std::map<std::string, std::string>::const_iterator iteratorType;
+
+	for (iteratorType it = headerFieldMap.begin(); it != headerFieldMap.end(); ++it)
+	{
+		header << it->first << ": " << it->second << "\r\n";
+	}
+
+	if (contentLength > 0)
+	{
+		header << "Content-Length: " << contentLength << "\r\n";
+	}
+
+	header << "\r\n";
+
+	return header.str();
 }

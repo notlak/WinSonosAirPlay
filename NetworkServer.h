@@ -23,6 +23,26 @@ public:
 	char* pContent;
 };
 
+class NetworkResponse
+{
+public:
+	NetworkResponse(const char* proto, int statusCode, const char* reasonPhrase);
+	virtual ~NetworkResponse();
+
+	void AddHeaderField(const char* name, const char* value);
+	void AddContent(const char* pData, int len);
+
+	std::string GetHeader() const;
+
+	std::string protocol;
+	int responseCode;
+	std::string reasonPhrase;
+
+	std::map<std::string, std::string> headerFieldMap;
+	int contentLength;
+	char* pContent;
+};
+
 class NetworkServerConnection
 {
 public:
@@ -34,7 +54,10 @@ public:
 
 	bool Close();
 
+	void GetIpAddress(unsigned char* pIpAddress); // ip address of this server
+
 	virtual void Transmit(const char* buff, int len);
+	virtual void SendResponse(const NetworkResponse& response);
 
 	class TransmitBuffer
 	{
