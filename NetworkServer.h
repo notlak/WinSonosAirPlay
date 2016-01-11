@@ -2,9 +2,26 @@
 
 #include <thread>
 #include <list>
+#include <map>
 #include <mutex>
 
 class NetworkServer;
+
+class NetworkRequest
+{
+public:
+	NetworkRequest(const char* pHeader = nullptr);
+	~NetworkRequest();
+
+	bool ParseHeader(const char* pHeader);
+
+	std::string type; // "GET" "POST" etc (uppercase)
+	std::string path;
+	std::string protocol; // "HTTP/1.0" "RTSP/1.0" etc
+	std::map<std::string, std::string> headerFieldMap; // field names lowercase
+	int contentLength;
+	char* pContent;
+};
 
 class NetworkServerConnection
 {
@@ -23,12 +40,15 @@ public:
 	{
 	public:
 		TransmitBuffer() : pData(nullptr), len(0) {}
+
 		TransmitBuffer(const char* pTxData, int txLen)
 		{
-			pData = new char[len];
-			memcpy(pData, pTxData, len);
+			pData = new char[txLen];
+			memcpy(pData, pTxData, txLen);
 			len = txLen;
 		}
+
+		~TransmitBuffer() { delete[] pData; }
 
 		char* pData;
 		int len;
@@ -51,6 +71,7 @@ protected:
 	static const int RxBuffSize = 4096;
 	char* _pRxBuff;
 	int _nRxBytes;
+	NetworkRequest _networkRequest;
 };
 
 class NetworkServer
@@ -61,7 +82,7 @@ public:
 
 	bool StartListening(const char* ip, int port);
 
-	virtual void OnReceive(NetworkServerConnection& connection, char* buff, int len) {}
+	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request) {}
 
 protected:
 

@@ -4,6 +4,7 @@
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 
+#include <algorithm>
 
 NetworkServer::NetworkServer()
 	:_pListeningThread(nullptr), _stopServer(false), _listeningSocket(INVALID_SOCKET)
@@ -86,6 +87,8 @@ void NetworkServer::ListeningThread()
 				new NetworkServerConnection(this, connectionSocket, remoteSockAddr);
 
 			pConnection->Initialise();
+
+			_connectionList.push_back(pConnection);
 		}
 	}
 }
@@ -155,24 +158,83 @@ void NetworkServerConnection::ReadThread()
 
 	while (!_closeConnection)
 	{
-		if ((nBytes = recv(_socket, buff, BuffLen, 0) > 0))
-		{
-			if (_nRxBytes == 0)
-			{
-				for (int i = nBytes - 4 - 1; i >= 0; i++)
-				{
-					if (buff[i] == '\r' && buff[i] == '\n' && buff[i] == '\r' && buff[i] == '\n')
-					{
-						// we should have the whole header
+		int headerLen = -1;
+		bool requestComplete = false;
 
+		if ((nBytes = recv(_socket, buff, BuffLen, 0)) > 0)
+		{
+			if (nBytes > 0)
+			{
+				//### check that we're not going to overrun the buffer
+				memcpy(_pRxBuff + _nRxBytes, buff, nBytes);
+				_nRxBytes += nBytes;
+
+				// check for \r\n\r\n signifying end of header
+				for (int i = 0; i <= nBytes - 4 && headerLen < 0; i++)
+				{
+					if (buff[i] == '\r' && buff[i+1] == '\n' && buff[i+2] == '\r' && buff[i+3] == '\n')
+						headerLen = i;
+				}
+
+				// parse the header and check if we're expecting a body
+
+				if (headerLen > 0)
+				{
+					char* pHeader = new char[headerLen + 1];
+					memcpy(pHeader, _pRxBuff, headerLen);
+					pHeader[headerLen] = '\0';
+
+					_networkRequest.ParseHeader(pHeader);
+
+					delete [] pHeader;
+
+					if (_networkRequest.contentLength > 0)
+					{
+						if (_nRxBytes - (headerLen + 4) >= _networkRequest.contentLength)
+						{
+							delete[] _networkRequest.pContent;
+
+							// add an extra byte to the content buffer so we can null
+							// terminate it to make it easier if it's a string
+
+							_networkRequest.pContent = new char[_networkRequest.contentLength + 1];
+							memcpy(_networkRequest.pContent, 
+								_pRxBuff + headerLen + 4,
+								_networkRequest.contentLength);
+
+							_networkRequest.pContent[_networkRequest.contentLength] = '\0';
+
+							requestComplete = true;
+						}			
+					}
+					else
+					{
+						requestComplete = true;
 					}
 				}
+
+				if (requestComplete)
+				{
+					_pServer->OnRequest(*this, _networkRequest);
+					_nRxBytes = 0;
+				}
 			}
-
-
-			_pServer->OnReceive(*this, buff, nBytes);
+			
 		}
+		else // socket has closed
+		{
+			_closeConnection = true;
+			_socket = INVALID_SOCKET;
+
+			// wake the transmit thread so it can end
+			_transmitCv.notify_all();
+
+			//### call OnDisconnect()/OnSocketClosed() ???
+		}
+
 	}
+
+	TRACE("Read thread complete\n");
 }
 
 void NetworkServerConnection::Transmit(const char* pBuff, int len)
@@ -188,16 +250,12 @@ void NetworkServerConnection::Transmit(const char* pBuff, int len)
 
 void NetworkServerConnection::TransmitThread()
 {
-	std::unique_lock<std::mutex> lock(_transmitMutex);
-
-	lock.unlock();
-
 	while (!_closeConnection)
 	{
-		lock.lock();
+		std::unique_lock<std::mutex> lock(_transmitMutex);
 		_transmitCv.wait(lock);
 		
-		while (_txQueue.size() > 0)
+		while (!_closeConnection && _txQueue.size() > 0)
 		{
 			TransmitBuffer* pTxBuff = _txQueue.front();
 tx:
@@ -205,7 +263,9 @@ tx:
 			int nBytes = send(_socket, ptr, pTxBuff->len, 0);
 
 			if (SOCKET_ERROR == nBytes)
+			{
 				TRACE("Error: unable to transmit data\n");
+			}
 			else if (nBytes < pTxBuff->len)
 			{
 				pTxBuff->len -= nBytes;
@@ -215,6 +275,133 @@ tx:
 
 			_txQueue.pop_front();
 			delete pTxBuff;
+
 		}
 	}
+
+	TRACE("Transmit thread complete\n");
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// NetworkRequest implementation
+///////////////////////////////////////////////////////////////////////////////
+
+NetworkRequest::NetworkRequest(const char* pHeader)
+	: pContent(nullptr), contentLength(0)
+{
+
+	if (pHeader)
+	{
+		if (!ParseHeader(pHeader))
+			TRACE("Error: failed to parse header");
+	}
+	
+}
+
+NetworkRequest::~NetworkRequest()
+{
+	delete[] pContent;
+}
+
+// example request:
+//GET / HTTP/1.1
+//Host: localhost
+//User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64; rv:43.0) Gecko/20100101 Firefox/43.0
+//Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+//Accept-Language: en-GB,en;q=0.5
+//Accept-Encoding: gzip, deflate
+//Connection: keep-alive
+
+bool NetworkRequest::ParseHeader(const char* pHeader)
+{
+	// initialise these values while we're at it in case
+	// this object is reused
+	type = "";
+	path = "";
+	protocol = "";
+	contentLength = 0;
+	delete[] pContent;
+	pContent = nullptr;
+	headerFieldMap.clear();
+
+	// split into lines
+	std::string hdr(pHeader);
+	std::string line;
+	std::list<std::string> lineList;
+
+	int startPos = 0, endPos = 0;
+
+	while (endPos != std::string::npos)
+	{
+		endPos = hdr.find("\r\n", startPos);
+
+		if (endPos == std::string::npos)
+			line = hdr.substr(startPos);
+		else
+			line = hdr.substr(startPos, endPos - startPos);
+
+		lineList.push_back(line);
+
+		startPos = endPos + 2; // skip the \r\n
+	}
+
+	// now process the first line e.g. "GET /some/path HTTP/1.0"
+
+	line = lineList.front();
+	lineList.pop_front();
+
+	endPos = line.find(' ');
+
+	if (endPos == std::string::npos)
+		return false;
+
+	type = hdr.substr(0, endPos);
+	std::transform(type.begin(), type.end(), type.begin(), ::toupper);
+
+	// get path
+
+	startPos = line.find_first_not_of(' ', endPos);
+	endPos = line.find(' ', startPos);
+
+	path = line.substr(startPos, endPos - startPos);
+
+	// protocol
+
+	startPos = line.find_first_not_of(' ', endPos);
+	protocol = line.substr(startPos);
+
+	// now process each of the following lines as <field name>: <field value>
+
+	std::string name, value;
+
+	while (lineList.size() > 0)
+	{
+		line = lineList.front();
+		lineList.pop_front();
+
+		startPos = line.find_first_not_of(" \t");
+		endPos = line.find(':', startPos);
+		
+		if (endPos == std::string::npos)
+			continue;
+
+		name = line.substr(startPos, endPos - startPos);
+
+		startPos = line.find_first_not_of(" \t", endPos + 1);
+		
+		value = line.substr(startPos);
+
+		// capitalise the name to make comparison reliable
+
+		std::transform(name.begin(), name.end(), name.begin(), ::toupper);
+
+		headerFieldMap[name] = value;
+
+	}
+
+	if (headerFieldMap.find("CONTENT-LENGTH") != headerFieldMap.end())
+		contentLength = atoi(headerFieldMap["CONTENT-LENGTH"].c_str());
+
+	return true;
 }

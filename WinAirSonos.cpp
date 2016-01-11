@@ -377,7 +377,7 @@ BOOL CWinAirSonosApp::InitInstance()
 
 	HttpServer httpServer;
 
-	httpServer.StartListening(nullptr, 80);
+	httpServer.StartListening(nullptr, 82);
 
 	// test SonosInterface
 	SonosInterface sonos;

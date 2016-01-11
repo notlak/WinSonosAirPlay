@@ -7,6 +7,6 @@ public:
 	HttpServer();
 	virtual ~HttpServer();
 
-	virtual void OnReceive(NetworkServerConnection& connection, char* buff, int len);
+	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request);
 };
 
