@@ -1,11 +1,10 @@
 #include "stdafx.h"
 #include "RtspServer.h"
 
+#include <sstream>
 #include <openssl\pem.h>
-#include <openssl\rsa.h>
 
-
-int Base64Decode(const char* b64message, unsigned char** buffer, size_t* length)
+static int Base64Decode(const char* b64message, unsigned char** buffer, size_t* length)
 {
 	BIO *bio, *b64;
 	int b64Len = strlen(b64message);
@@ -32,7 +31,7 @@ int Base64Decode(const char* b64message, unsigned char** buffer, size_t* length)
 	return 0;
 }
 
-int Base64Encode(const unsigned char* buffer, size_t length, char* b64text)
+static int Base64Encode(const unsigned char* buffer, size_t length, char* b64text)
 {
 	BIO *bio, *b64;
 	BUF_MEM *bufferPtr;
@@ -59,6 +58,9 @@ int Base64Encode(const unsigned char* buffer, size_t length, char* b64text)
 	return 0;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// RtspServer
+///////////////////////////////////////////////////////////////////////////////
 
 RtspServer::RtspServer()
 	: _airPortExpressKey(nullptr)
@@ -173,46 +175,63 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 	// create either an ALAC or PCM decoder stream depending on rtpmap
 	// create output stream
 
-	std::string b64Key = request.headerFieldMap["RSAAESKEY"];
+	RtspServerConnection* pRtspServerConnection = static_cast<RtspServerConnection*>(&connection);
 
-	unsigned char* encKey;
-	size_t encKeyLen = 0;
+	// the parameters of interest are in the body, we null terminate this
 
-	Base64Decode(b64Key.c_str(), &encKey, &encKeyLen);
+	std::string content = request.pContent;
 
-	RSA_private_decrypt(encKeyLen, encKey, _aesKey, _airPortExpressKey, RSA_PKCS1_OAEP_PADDING);
+	size_t pos = content.find("rsaaeskey:");
+	size_t len = 0;
 
-	free(encKey);
+	if (pos != std::string::npos)
+	{
+		pos += 10;
+		len = content.find('\r', pos);
 
-	pos = req.find("aesiv:");
+		len -= pos;
+
+		std::string b64Key = content.substr(pos, len);
+
+		unsigned char* encKey;
+		size_t encKeyLen = 0;
+
+		Base64Decode(b64Key.c_str(), &encKey, &encKeyLen);
+
+		RSA_private_decrypt(encKeyLen, encKey, pRtspServerConnection->_aesKey, _airPortExpressKey, RSA_PKCS1_OAEP_PADDING);
+
+		free(encKey);
+	}
+
+	pos = content.find("aesiv:");
 
 	if (pos != std::string::npos)
 	{
 		pos += 6;
-		len = req.find('\r', pos);
+		len = content.find('\r', pos);
 
 		len -= pos;
-		std::string b64AesIv = req.substr(pos, len);
+		std::string b64AesIv = content.substr(pos, len);
 
 		unsigned char* iv = nullptr;
 		size_t ivLen = 0;
 
 		Base64Decode(b64AesIv.c_str(), &iv, &ivLen);
 
-		memcpy(_aesIv, iv, ivLen);
+		memcpy(pRtspServerConnection->_aesIv, iv, ivLen);
 	}
 
 	// parse the codec parameters for ALAC
 
-	pos = req.find("a=fmtp:");
+	pos = content.find("a=fmtp:");
 
 	if (pos != std::string::npos)
 	{
 		pos += 7;
-		len = req.find('\r', pos);
+		len = content.find('\r', pos);
 
 		len -= pos;
-		std::string params = req.substr(pos, len);
+		std::string params = content.substr(pos, len);
 
 		// create magic cookie for ALAC decode
 		// ###todo: handle parameters other than those for ALAC
@@ -230,43 +249,214 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 
 		//### check packing issues
 
-		_alacConfig.frameLength = frameLength;
-		_alacConfig.compatibleVersion = (uint8_t)compatibleVersion;
-		_alacConfig.bitDepth = (uint8_t)bitDepth;
-		_alacConfig.pb = (uint8_t)pb;
-		_alacConfig.mb = (uint8_t)mb;
-		_alacConfig.kb = (uint8_t)kb;
-		_alacConfig.numChannels = (uint8_t)numChannels;
-		_alacConfig.maxRun = (uint16_t)maxRun;
-		_alacConfig.maxFrameBytes = maxFrameBytes;
-		_alacConfig.avgBitRate = avgBitRate;
-		_alacConfig.sampleRate = sampleRate;
-
+		pRtspServerConnection->_alacConfig.frameLength = frameLength;
+		pRtspServerConnection->_alacConfig.compatibleVersion = (uint8_t)compatibleVersion;
+		pRtspServerConnection->_alacConfig.bitDepth = (uint8_t)bitDepth;
+		pRtspServerConnection->_alacConfig.pb = (uint8_t)pb;
+		pRtspServerConnection->_alacConfig.mb = (uint8_t)mb;
+		pRtspServerConnection->_alacConfig.kb = (uint8_t)kb;
+		pRtspServerConnection->_alacConfig.numChannels = (uint8_t)numChannels;
+		pRtspServerConnection->_alacConfig.maxRun = (uint16_t)maxRun;
+		pRtspServerConnection->_alacConfig.maxFrameBytes = maxFrameBytes;
+		pRtspServerConnection->_alacConfig.avgBitRate = avgBitRate;
+		pRtspServerConnection->_alacConfig.sampleRate = sampleRate;
 	}
 
+	NetworkResponse resp("RTSP/1.0", 200, "OK");
+	resp.AddHeaderField("Server", "AirTunes/105.1");
+	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
+
+	connection.SendResponse(resp);
 }
 
 void RtspServer::HandleSetup(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	// nodetunes does:
+	// generate 3 random port numbers 5000..9999 for audio, control and timing
+	// call rtp.start() which creates UDP (dgram) sockets and binds them to the 3 ports
+	// when data arrives at the audio socket decrypt it and write to output stream
+	// use the control port to check for timeouts
+
+	RtspServerConnection* pConn = static_cast<RtspServerConnection*>(&connection);
+
+	pConn->_pAudioSocket = new CUdpSocket();
+	pConn->_pControlSocket = new CUdpSocket();
+	pConn->_pTimingSocket = new CUdpSocket();
+
+	pConn->_pAudioSocket->Initialise();
+	pConn->_pControlSocket->Initialise();
+	pConn->_pTimingSocket->Initialise();
+
+
+	if (pConn->_pAudioSocket->GetPort() < 0 || pConn->_pControlSocket->GetPort() < 0 || pConn->_pTimingSocket->GetPort() < 0)
+	{
+		TRACE("Error: unable to create UDP sockets\n");
+	}
+	else
+	{
+		NetworkResponse resp("RTSP/1.0", 200, "OK");
+		resp.AddHeaderField("Server", "AirTunes/105.1");
+		resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
+
+		std::ostringstream transport;
+		transport << "RTP/AVP/UDP;unicast;mode=record"
+			";server_port=" << pConn->_pAudioSocket->GetPort() <<
+			";control_port=" << pConn->_pControlSocket->GetPort() <<
+			";timing port=" << pConn->_pTimingSocket->GetPort();
+
+		resp.AddHeaderField("Transport", transport.str().c_str());
+		resp.AddHeaderField("Session", "1");
+		resp.AddHeaderField("Audio-Jack-Status", "connected");
+
+		connection.SendResponse(resp);
+
+		pConn->_pAudioThread = new std::thread(&RtspServerConnection::AudioThread, pConn);
+
+	}
 }
 
 void RtspServer::HandleRecord(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	NetworkResponse resp("RTSP/1.0", 200, "OK");
+	resp.AddHeaderField("Server", "AirTunes/105.1");
+	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
+	resp.AddHeaderField("Audio-Latency", "0");
+
+	connection.SendResponse(resp);
 }
 
 void RtspServer::HandleFlush(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	NetworkResponse resp("RTSP/1.0", 200, "OK");
+	resp.AddHeaderField("Server", "AirTunes/105.1");
+	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
+
+	connection.SendResponse(resp);
 }
 
 void RtspServer::HandleGetParameter(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	NetworkResponse resp("RTSP/1.0", 200, "OK");
+	resp.AddHeaderField("Server", "AirTunes/105.1");
+	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
+
+	connection.SendResponse(resp);
 }
 
 void RtspServer::HandleSetParameter(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	NetworkResponse resp("RTSP/1.0", 200, "OK");
+	resp.AddHeaderField("Server", "AirTunes/105.1");
+	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
+
+	connection.SendResponse(resp);
 }
 
 void RtspServer::HandleTeardown(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	NetworkResponse resp("RTSP/1.0", 200, "OK");
+	resp.AddHeaderField("Server", "AirTunes/105.1");
+	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
+
+	connection.SendResponse(resp);
 }
 
+
+///////////////////////////////////////////////////////////////////////////////
+// RtspServerConnection
+///////////////////////////////////////////////////////////////////////////////
+
+RtspServerConnection::RtspServerConnection(NetworkServerInterface* pServerInterface, SOCKET socket, SOCKADDR_IN& remoteAddr)
+	: NetworkServerConnection(pServerInterface, socket, remoteAddr),
+	_pAudioSocket(nullptr),
+	_pControlSocket(nullptr),
+	_pTimingSocket(nullptr),
+	_pAudioThread(nullptr),
+	_stopAudioThread(false)
+{
+
+}
+
+RtspServerConnection::~RtspServerConnection()
+{
+	_stopAudioThread = true;
+
+	if (_pAudioThread)
+		_pAudioThread->join();
+
+	delete _pAudioSocket;
+	delete _pControlSocket;
+	delete _pTimingSocket;
+}
+
+
+void RtspServerConnection::AudioThread()
+{
+	TRACE("AudioThread() running...\n");
+
+	const int BufferSize = 2048;
+	char buffer[BufferSize];
+
+	_transcoder.Init(&_alacConfig);
+
+	while (!_stopAudioThread)
+	{
+		int nBytes;
+
+		nBytes = _pAudioSocket->Read(buffer, BufferSize);
+		if (nBytes > 0)
+		{
+			unsigned short seq = 0;
+			DecryptAudio((unsigned char*)buffer, nBytes, seq);
+			_transcoder.Write((unsigned char*)buffer + 12, nBytes - 12);
+
+			TRACE("Received %d bytes from Audio port Seq:%d\n", nBytes, seq);
+		}
+
+		nBytes = _pControlSocket->Read(buffer, BufferSize);
+		//if (nBytes > 0)
+		//TRACE("Received %d bytes from Control port\n", nBytes);
+
+		nBytes = _pTimingSocket->Read(buffer, BufferSize);
+		//if (nBytes > 0)
+		//TRACE("Received %d bytes from Timing port\n", nBytes);
+	}
+
+}
+
+bool RtspServerConnection::DecryptAudio(unsigned char* pEncBytes, int len, unsigned short& seq)
+{
+	const int HeaderSize = 12;
+
+	int remainder = (len - HeaderSize) % 16;
+
+	int endOfData = len - remainder;
+
+	EVP_CIPHER_CTX* ctx; // context
+
+	if (!(ctx = EVP_CIPHER_CTX_new()))
+		return false;
+
+	if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_128_cbc(), nullptr, _aesKey, _aesIv))
+	{
+		EVP_CIPHER_CTX_free(ctx);
+		return false;
+	}
+
+	EVP_CIPHER_CTX_set_padding(ctx, 0);
+
+	int decLen = 0;
+	unsigned char tempBuff[16];
+
+	for (int i = HeaderSize; i <= endOfData - 16; i += 16)
+	{
+		memcpy(tempBuff, &pEncBytes[i], 16);
+		EVP_DecryptUpdate(ctx, &pEncBytes[i], &decLen, tempBuff, 16);  // decrypt in 16 byte chunks
+	}
+
+	EVP_CIPHER_CTX_free(ctx);
+
+	seq = (pEncBytes[2] << 8) + pEncBytes[3];
+
+	return true;
+}

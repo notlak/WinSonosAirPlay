@@ -7,7 +7,7 @@
 #include "WinAirSonosDlg.h"
 #include "AirPlayRTSPServer.h"
 #include "SonosInterface.h"
-#include "HttpServer.h"
+#include "RtspServer.h"
 
 // live555 (RTSP/RTP server) includes
 #include <BasicUsageEnvironment.hh>
@@ -264,7 +264,7 @@ BOOL CWinAirSonosApp::InitInstance()
 	
 
 	const int RTSP_PORT = 50001;
-
+	/* WAS THIS
 	// start an RTSP server
 	TaskScheduler* scheduler = BasicTaskScheduler::createNew();
 	UsageEnvironment* rtspEnv = BasicUsageEnvironment::createNew(*scheduler);
@@ -274,6 +274,7 @@ BOOL CWinAirSonosApp::InitInstance()
 		TRACE("Failed to create RTSP server: %s\n", rtspEnv->getResultMsg());
 		// ### graceful exit
 	}
+	END */
 
 	//----------------------------- MP3 stream test --------------------------------
 
@@ -375,15 +376,15 @@ BOOL CWinAirSonosApp::InitInstance()
 	
 	TXTRecordDeallocate(&txtRef);
 
-	HttpServer httpServer;
+	RtspServer airPlayServer;
 
-	httpServer.StartListening(nullptr, 82);
+	airPlayServer.StartListening(nullptr, RTSP_PORT);
 
 	// test SonosInterface
-	SonosInterface sonos;
-	sonos.Init();
+	//SonosInterface sonos;
+	//sonos.Init();
 
-	sonos.FindSpeakers();
+	//sonos.FindSpeakers();
 
 	//sonos.Test();
 
@@ -392,7 +393,7 @@ BOOL CWinAirSonosApp::InitInstance()
 	bool ok = sonos.HttpRequest("95.211.70.200", 80, "/tools/website-speed-test", doc);*/
 
 
-	rtspEnv->taskScheduler().doEventLoop();
+	//>>>>>>>>>>>> rtspEnv->taskScheduler().doEventLoop();
 
 	CWinAirSonosDlg dlg;
 	m_pMainWnd = &dlg;

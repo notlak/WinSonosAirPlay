@@ -5,7 +5,9 @@
 #include <map>
 #include <mutex>
 
-class NetworkServer;
+///////////////////////////////////////////////////////////////////////////////
+// NetworkRequest
+///////////////////////////////////////////////////////////////////////////////
 
 class NetworkRequest
 {
@@ -23,6 +25,10 @@ public:
 	char* pContent;
 };
 
+///////////////////////////////////////////////////////////////////////////////
+// NetworkResponse
+///////////////////////////////////////////////////////////////////////////////
+
 class NetworkResponse
 {
 public:
@@ -36,17 +42,22 @@ public:
 
 	std::string protocol;
 	int responseCode;
-	std::string reasonPhrase;
+	std::string reason;
 
 	std::map<std::string, std::string> headerFieldMap;
 	int contentLength;
 	char* pContent;
 };
 
+///////////////////////////////////////////////////////////////////////////////
+// NetworkServerConnection
+///////////////////////////////////////////////////////////////////////////////
+class NetworkServerInterface;
+
 class NetworkServerConnection
 {
 public:
-	NetworkServerConnection(NetworkServer* pServer, SOCKET socket, SOCKADDR_IN& remoteAddr);
+	NetworkServerConnection(NetworkServerInterface* pServerInterface, SOCKET socket, SOCKADDR_IN& remoteAddr);
 
 	virtual ~NetworkServerConnection();
 
@@ -82,7 +93,7 @@ protected:
 	void ReadThread();
 	void TransmitThread();
 
-	NetworkServer* _pServer;
+	NetworkServerInterface* _pServer;
 	SOCKET _socket;
 	SOCKADDR_IN _remoteAddr;
 	bool _closeConnection;
@@ -91,25 +102,119 @@ protected:
 	std::mutex _transmitMutex;
 	std::condition_variable _transmitCv;
 	std::list<TransmitBuffer*> _txQueue;
-	static const int RxBuffSize = 4096;
+	//static const int RxBuffSize = 8192;
+	int _rxBuffSize;
 	char* _pRxBuff;
 	int _nRxBytes;
 	NetworkRequest _networkRequest;
 };
 
-class NetworkServer
+///////////////////////////////////////////////////////////////////////////////
+// NetworkServerInterface
+///////////////////////////////////////////////////////////////////////////////
+
+class NetworkServerInterface // this is used to get over the problem of having a templated NetworkServer called from the Connection class
 {
 public:
-	NetworkServer();
-	virtual ~NetworkServer();
+	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request) = 0;
 
-	bool StartListening(const char* ip, int port);
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// NetworkServer
+///////////////////////////////////////////////////////////////////////////////
+
+template<class ConnectionType>
+class NetworkServer : public NetworkServerInterface
+{
+public:
+	NetworkServer() :_pListeningThread(nullptr), _stopServer(false), _listeningSocket(INVALID_SOCKET) {}
+
+	virtual ~NetworkServer()
+	{
+		_stopServer = true;
+
+		if (_listeningSocket != INVALID_SOCKET)
+			closesocket(_listeningSocket);
+
+		_pListeningThread->join();
+		delete _pListeningThread;
+
+		while (_connectionList.size() > 0)
+		{
+			NetworkServerConnection* pCon = _connectionList.front();
+			_connectionList.pop_front();
+
+			pCon->Close();
+			delete pCon;
+		}
+	}
+
+	bool StartListening(const char* ip, int port)
+	{
+		sockaddr_in addr;
+
+		_listeningSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+		if (INVALID_SOCKET == _listeningSocket)
+			return false;
+
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons((unsigned short)port);
+
+		if (ip == nullptr || ip[0] == '\0')
+			addr.sin_addr.S_un.S_addr = INADDR_ANY;
+		else
+			inet_pton(AF_INET, ip, &addr); // ### todo IPv6 support assume IPv4 for now
+
+		if (bind(_listeningSocket, (sockaddr*)&addr, sizeof addr))
+		{
+			closesocket(_listeningSocket);
+			_listeningSocket = INVALID_SOCKET;
+			return false;
+		}
+
+		if (listen(_listeningSocket, SOMAXCONN))
+		{
+			closesocket(_listeningSocket);
+			_listeningSocket = INVALID_SOCKET;
+			return false;
+		}
+
+
+		// start a thread to accept connections
+
+		_pListeningThread = new std::thread(&NetworkServer::ListeningThread, this);
+
+		return true;
+	}
 
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request) {}
 
 protected:
 
-	void ListeningThread();
+	void ListeningThread()
+	{
+		SOCKADDR_IN remoteSockAddr;
+		int remoteSockAddrLen = sizeof remoteSockAddr;
+
+		while (!_stopServer)
+		{
+			SOCKET connectionSocket = accept(_listeningSocket, (sockaddr*)&remoteSockAddr, &remoteSockAddrLen);
+
+			if (INVALID_SOCKET != connectionSocket)
+			{
+				// create new NetworkServerConnection
+
+				NetworkServerConnection* pConnection =
+					new NetworkServerConnection(this, connectionSocket, remoteSockAddr);
+
+				pConnection->Initialise();
+
+				_connectionList.push_back(pConnection);
+			}
+		}
+	}
 
 	std::list<NetworkServerConnection*> _connectionList;
 	SOCKET _listeningSocket;

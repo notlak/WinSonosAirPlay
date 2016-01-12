@@ -1,7 +1,7 @@
 #pragma once
 #include "NetworkServer.h"
 
-class HttpServer : public NetworkServer
+class HttpServer : public NetworkServer<NetworkServerConnection>
 {
 public:
 	HttpServer();

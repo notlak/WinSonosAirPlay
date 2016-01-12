@@ -7,12 +7,17 @@
 #include <algorithm>
 #include <sstream>
 
-NetworkServer::NetworkServer()
+/*
+template<class ConnectionType>
+NetworkServer<ConnectionType>::NetworkServer()
 	:_pListeningThread(nullptr), _stopServer(false), _listeningSocket(INVALID_SOCKET)
 {
 }
+*/
 
-NetworkServer::~NetworkServer()
+/*
+template<class ConnectionType>
+NetworkServer<ConnectionType>::~NetworkServer()
 {
 	_stopServer = true;
 
@@ -32,7 +37,9 @@ NetworkServer::~NetworkServer()
 	}
 }
 
-bool NetworkServer::StartListening(const char* ip, int port)
+
+template<class ConnectionType>
+bool NetworkServer<ConnectionType>::StartListening(const char* ip, int port)
 {
 	sockaddr_in addr;
 	
@@ -71,7 +78,8 @@ bool NetworkServer::StartListening(const char* ip, int port)
 	return true;
 }
 
-void NetworkServer::ListeningThread()
+template<class ConnectionType>
+void NetworkServer<ConnectionType>::ListeningThread()
 {
 	SOCKADDR_IN remoteSockAddr;
 	int remoteSockAddrLen = sizeof remoteSockAddr;
@@ -93,22 +101,25 @@ void NetworkServer::ListeningThread()
 		}
 	}
 }
-
+*/
 
 ///////////////////////////////////////////////////////////////////////////////
 // NetworkServerConnection implementation
 ///////////////////////////////////////////////////////////////////////////////
 
-NetworkServerConnection::NetworkServerConnection(NetworkServer* pServer, SOCKET socket, SOCKADDR_IN& remoteAddr)
-	: _pServer(pServer),
+NetworkServerConnection::NetworkServerConnection(NetworkServerInterface* pServerInterface, SOCKET socket, SOCKADDR_IN& remoteAddr)
+	: _pServer(pServerInterface),
 	_socket(socket),
 	_remoteAddr(remoteAddr),
 	_closeConnection(false),
 	_pReadThread(nullptr),
 	_pTransmitThread(nullptr),
-	_nRxBytes(0)
+	_nRxBytes(0),
+	_rxBuffSize(8192)
 {
-	_pRxBuff = new char[RxBuffSize];
+	//_pRxBuff = new char[RxBuffSize];
+	_pRxBuff = new char[_rxBuffSize];
+
 }
 
 NetworkServerConnection::~NetworkServerConnection()
@@ -165,8 +176,8 @@ bool NetworkServerConnection::Close()
 
 void NetworkServerConnection::ReadThread()
 {
-	const int BuffLen = 8192;
-	char buff[BuffLen];
+	//const int BuffLen = 8192;
+	//char buff[BuffLen];
 
 	int nBytes = 0;
 
@@ -175,20 +186,48 @@ void NetworkServerConnection::ReadThread()
 		int headerLen = -1;
 		bool requestComplete = false;
 
-		if ((nBytes = recv(_socket, buff, BuffLen, 0)) > 0)
+		int buffAvail = _rxBuffSize - _nRxBytes;
+
+		//if ((nBytes = recv(_socket, buff, BuffLen, 0)) > 0)
+		if ((nBytes = recv(_socket, _pRxBuff + _nRxBytes, buffAvail, 0)) > 0)
 		{
 			if (nBytes > 0)
 			{
-				//### check that we're not going to overrun the buffer
-				memcpy(_pRxBuff + _nRxBytes, buff, nBytes);
 				_nRxBytes += nBytes;
 
+				if (nBytes == buffAvail)
+				{
+					// we may overrun
+
+					char* pOldBuff = _pRxBuff;
+
+					_rxBuffSize <<= 2;
+
+					TRACE("Rx buffer increased: %d\n", _rxBuffSize);
+
+					_pRxBuff = new char[_rxBuffSize];
+					memcpy(_pRxBuff, pOldBuff, _nRxBytes);
+
+					delete [] pOldBuff;
+				}
+
+				//memcpy(_pRxBuff + _nRxBytes, buff, nBytes);
+				//_nRxBytes += nBytes;
+
 				// check for \r\n\r\n signifying end of header
+				/*
 				for (int i = 0; i <= nBytes - 4 && headerLen < 0; i++)
 				{
 					if (buff[i] == '\r' && buff[i+1] == '\n' && buff[i+2] == '\r' && buff[i+3] == '\n')
 						headerLen = i;
 				}
+				*/
+				for (int i = 0; i <= _nRxBytes - 4 && headerLen < 0; i++)
+				{
+					if (_pRxBuff[i] == '\r' && _pRxBuff[i + 1] == '\n' && _pRxBuff[i + 2] == '\r' && _pRxBuff[i + 3] == '\n')
+						headerLen = i;
+				}
+
 
 				// parse the header and check if we're expecting a body
 
@@ -443,7 +482,7 @@ bool NetworkRequest::ParseHeader(const char* pHeader)
 ///////////////////////////////////////////////////////////////////////////////
 
 NetworkResponse::NetworkResponse(const char* proto, int statusCode, const char* reasonPhrase)
-	: contentLength(0), pContent(nullptr), protocol(proto)
+	: contentLength(0), pContent(nullptr), protocol(proto), responseCode(statusCode), reason(reasonPhrase)
 {
 
 }
@@ -469,7 +508,7 @@ std::string NetworkResponse::GetHeader() const
 {
 	std::ostringstream header;
 
-	header << protocol << " " << responseCode << " " << reasonPhrase << "\r\n";
+	header << protocol << " " << responseCode << " " << reason << "\r\n";
 	typedef std::map<std::string, std::string>::const_iterator iteratorType;
 
 	for (iteratorType it = headerFieldMap.begin(); it != headerFieldMap.end(); ++it)
