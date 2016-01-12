@@ -142,7 +142,7 @@ public:
 
 		while (_connectionList.size() > 0)
 		{
-			NetworkServerConnection* pCon = _connectionList.front();
+			ConnectionType* pCon = dynamic_cast<ConnectionType*>(_connectionList.front());
 			_connectionList.pop_front();
 
 			pCon->Close();
@@ -206,8 +206,8 @@ protected:
 			{
 				// create new NetworkServerConnection
 
-				NetworkServerConnection* pConnection =
-					new NetworkServerConnection(this, connectionSocket, remoteSockAddr);
+				ConnectionType* pConnection =
+					new ConnectionType(this, connectionSocket, remoteSockAddr);
 
 				pConnection->Initialise();
 

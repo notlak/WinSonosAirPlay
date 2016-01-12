@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <sstream>
 
+#define new DEBUG_NEW
+
 /*
 template<class ConnectionType>
 NetworkServer<ConnectionType>::NetworkServer()
@@ -124,6 +126,8 @@ NetworkServerConnection::NetworkServerConnection(NetworkServerInterface* pServer
 
 NetworkServerConnection::~NetworkServerConnection()
 {
+	Close();
+
 	while (_txQueue.size() > 0)
 	{
 		delete _txQueue.front();
@@ -131,6 +135,9 @@ NetworkServerConnection::~NetworkServerConnection()
 	}
 
 	delete[] _pRxBuff;
+
+	delete _pReadThread;
+	delete _pTransmitThread;
 }
 
 bool NetworkServerConnection::Initialise()
@@ -246,6 +253,7 @@ void NetworkServerConnection::ReadThread()
 						if (_nRxBytes - (headerLen + 4) >= _networkRequest.contentLength)
 						{
 							delete[] _networkRequest.pContent;
+							_networkRequest.pContent = nullptr;
 
 							// add an extra byte to the content buffer so we can null
 							// terminate it to make it easier if it's a string
@@ -392,8 +400,8 @@ bool NetworkRequest::ParseHeader(const char* pHeader)
 	path = "";
 	protocol = "";
 	contentLength = 0;
-	delete[] pContent;
-	pContent = nullptr;
+	//delete[] pContent;
+	//pContent = nullptr;
 	headerFieldMap.clear();
 
 	// split into lines
