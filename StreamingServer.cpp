@@ -4,8 +4,18 @@
 #include <sstream>
 
 ///////////////////////////////////////////////////////////////////////////////
-// StreamingServer implementation
+// StreamingServer implementation - this is a Singleton
 ///////////////////////////////////////////////////////////////////////////////
+
+StreamingServer* StreamingServer::InstancePtr = nullptr;
+
+StreamingServer* StreamingServer::GetStreamingServer()
+{
+	if (InstancePtr == nullptr)
+		InstancePtr = new StreamingServer();
+
+	return InstancePtr;
+}
 
 StreamingServer::StreamingServer()
 {
@@ -13,6 +23,20 @@ StreamingServer::StreamingServer()
 
 StreamingServer::~StreamingServer()
 {
+	// remove all the streams
+
+	for (auto it = _streamMap.begin(); it != _streamMap.end(); ++it)
+		delete it->second;
+
+	_streamMap.clear();
+}
+
+void StreamingServer::CreateStream(int streamId)
+{
+	// only create the stream if it doesn't already exist
+
+	if (_streamMap.find(streamId) == _streamMap.end())
+		_streamMap[streamId] = new StreamingServerStream(streamId, this);
 }
 
 void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequest& request)
@@ -33,7 +57,7 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 		{
 			startPos++; // don't want '/'
 
-			serialIdStr = request.path.substr(startPos + 1, endPos - startPos);
+			serialIdStr = request.path.substr(startPos, endPos - startPos);
 
 			streamId = atoi(serialIdStr.c_str());
 
@@ -46,7 +70,7 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 
 				std::ostringstream body;
 
-				body << "http://" << connection.GetIpAddress() << ":" << _port << "/listen";
+				body << "http://" << connection.GetIpAddress() << ":" << _port << "/" << streamId << "/listen";
 
 				resp.AddContent(body.str().c_str(), body.str().length());
 
@@ -62,12 +86,16 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 		{
 			startPos++; // don't want '/'
 
-			serialIdStr = request.path.substr(startPos + 1, endPos - startPos);
+			serialIdStr = request.path.substr(startPos, endPos - startPos);
 
 			streamId = atoi(serialIdStr.c_str());
 
 			if (streamId > 0)
 			{
+				// create a corresponding stream object in the server if one doesn't exist
+
+				CreateStream(streamId);
+
 				((StreamingServerConnection*)&connection)->_streamIdRequested = streamId;
 
 				NetworkResponse resp("HTTP/1.0", 200, "OK");
@@ -85,12 +113,34 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 	}
 }
 
+// called by audio provider
 void StreamingServer::AddStreamData(int streamId, unsigned char* pData, int len)
 {
-	if (streamId <= 0) return;
 
-	
+	//### add mutex
+
+	// keep the latency short, don't add stream data if the stream doesn't exist
+	if ((_streamMap.find(streamId)) == _streamMap.end())
+		return;
+
+	_streamMap[streamId]->AddData(pData, len);
+
 }
+
+// called from a StreamingServerStream instance
+void StreamingServer::TransmitStreamData(int streamId, unsigned char* pData, int len)
+{
+	//### add mutex
+
+	// send data out on each connection listening to this stream
+	for (std::list<NetworkServerConnection*>::iterator it = _connectionList.begin(); it != _connectionList.end(); ++it)
+	{
+		StreamingServerConnection* pConn = dynamic_cast<StreamingServerConnection*>(*it);
+		pConn->Transmit((char*)pData, len);
+	}
+
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // StreamingServerConnection implementation
@@ -99,7 +149,6 @@ void StreamingServer::AddStreamData(int streamId, unsigned char* pData, int len)
 StreamingServerConnection::StreamingServerConnection(NetworkServerInterface* pServerInterface, SOCKET socket, SOCKADDR_IN& remoteAddr)
 	: NetworkServerConnection(pServerInterface, socket, remoteAddr),
 	_streamIdRequested(-1)
-
 {
 
 }
@@ -114,8 +163,9 @@ StreamingServerConnection::~StreamingServerConnection()
 // StreamingServerStream implementation
 ///////////////////////////////////////////////////////////////////////////////
 
-StreamingServerStream::StreamingServerStream(int id)
-: _id(id), _buffSize(65536), _pBuff(nullptr), _nBytesInBuff(0)
+StreamingServerStream::StreamingServerStream(int id, StreamingServer* pServer)
+	: _id(id), _buffSize(65536), _pBuff(nullptr), _nBytesInBuff(0),
+		_pServer(nullptr), _metaCount(0)
 {
 	_pBuff = new unsigned char[_buffSize];
 }
@@ -128,8 +178,55 @@ StreamingServerStream::~StreamingServerStream()
 
 void StreamingServerStream::AddData(unsigned char* pData, int len)
 {
+	// increase the buffer size if it's too small
+
 	if ((len + _nBytesInBuff) > _buffSize)
 	{
+		unsigned char* pOldBuff = _pBuff;
 
+		_buffSize <<= 1; // double the size
+
+		_pBuff = new unsigned char[_buffSize];
+
+		memcpy(_pBuff, pOldBuff, _nBytesInBuff);
+
+		delete[] pOldBuff;
 	}
+
+	// add data to the buffer
+
+	memcpy(_pBuff + _nBytesInBuff, pData, len);
+	_nBytesInBuff += len;
+
+	// transmit the data
+
+	while (_nBytesInBuff > 0)
+	{
+		int nBytesToSend = 0;
+		bool sendMeta = false;
+
+		if (_buffSize + _metaCount < MetaInterval)
+		{
+			nBytesToSend = _nBytesInBuff; // send all
+		}
+		else
+		{
+			nBytesToSend = MetaInterval - _metaCount;
+			sendMeta = true;
+		}
+
+		_pServer->TransmitStreamData(_id, _pBuff, nBytesToSend);
+
+		// for now send no metadata
+		if (sendMeta)
+		{
+			unsigned char zero = 0;
+			_pServer->TransmitStreamData(_id, &zero, 1);
+		}
+
+		memmove(_pBuff, _pBuff + nBytesToSend, nBytesToSend);
+		_nBytesInBuff -= nBytesToSend;
+		_metaCount = (_metaCount + nBytesToSend) % MetaInterval;
+	}
+
 }

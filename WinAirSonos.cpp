@@ -7,6 +7,7 @@
 #include "WinAirSonosDlg.h"
 #include "SonosInterface.h"
 #include "RtspServer.h"
+#include "StreamingServer.h"
 
 //#include "AirPlayRTSPServer.h"
 // live555 (RTSP/RTP server) includes
@@ -110,6 +111,8 @@ BOOL CWinAirSonosApp::InitInstance()
 	SetRegistryKey(_T("KODR"));
 
 	const int RTSP_PORT = 50001;
+	const int MP3_PORT = 50002;
+
 	/* WAS THIS
 	// start an RTSP server
 	TaskScheduler* scheduler = BasicTaskScheduler::createNew();
@@ -222,8 +225,10 @@ BOOL CWinAirSonosApp::InitInstance()
 	
 	TXTRecordDeallocate(&txtRef);
 
-	RtspServer airPlayServer;
+	StreamingServer* pStreamingServer = StreamingServer::GetStreamingServer();
+	pStreamingServer->StartListening(nullptr, MP3_PORT);
 
+	RtspServer airPlayServer;
 	airPlayServer.StartListening(nullptr, RTSP_PORT);
 
 	// test SonosInterface

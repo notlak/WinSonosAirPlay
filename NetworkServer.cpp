@@ -223,7 +223,7 @@ void NetworkServerConnection::ReadThread()
 
 					char* pOldBuff = _pRxBuff;
 
-					_rxBuffSize <<= 2;
+					_rxBuffSize <<= 1;
 
 					TRACE("Rx buffer increased: %d\n", _rxBuffSize);
 

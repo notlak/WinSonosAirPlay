@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "Transcoder.h"
-
+#include "StreamingServer.h"
 
 #include <ALACBitUtilities.h>
 
@@ -34,7 +34,7 @@ void LameError(const char* format, va_list ap)
 	TRACE("%s\n", format);
 }
 
-bool CTranscoder::Init(ALACSpecificConfig* alacConfig)
+bool CTranscoder::Init(ALACSpecificConfig* alacConfig, int streamId)
 {
 	// first the ALAC decoder
 
@@ -73,6 +73,8 @@ bool CTranscoder::Init(ALACSpecificConfig* alacConfig)
 	_nMp3Buffer = 1.25 * alacConfig->frameLength + 7200; // worst case apparently
 	_pMp3Buffer = new uint8_t[_nMp3Buffer];
 
+	_streamId = streamId;
+
 	return true;
 }
 
@@ -90,14 +92,19 @@ bool CTranscoder::Write(unsigned char* pAlac, int len)
 	if (status < 0)
 		TRACE("Error: ALAC Decode returned %d\n", status);
 	else
-		fwrite(_pAlacOutputBuffer, 1, nOutBytes, fPcmFile);
+		;// fwrite(_pAlacOutputBuffer, 1, nOutBytes, fPcmFile);
 	
 	int nMp3Bytes = lame_encode_buffer_interleaved(_pLameGlobalFlags, (short*)_pAlacOutputBuffer, nOutBytes >> 2, _pMp3Buffer, _nMp3Buffer);
 
 	if (nMp3Bytes < 0)
+	{
 		TRACE("Error: lame_encode_buffer() failed\n");
+	}
 	else
+	{
 		fwrite(_pMp3Buffer, 1, nMp3Bytes, fMp3File);
+		StreamingServer::GetStreamingServer()->AddStreamData(_streamId, _pMp3Buffer, nMp3Bytes);
+	}
 
 	return status >= 0;
 }

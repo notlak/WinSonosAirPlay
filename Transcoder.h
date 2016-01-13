@@ -13,7 +13,7 @@ public:
 	CTranscoder();
 	virtual ~CTranscoder();
 
-	bool Init(ALACSpecificConfig* alacConfig);
+	bool Init(ALACSpecificConfig* alacConfig, int streamId);
 
 	bool Write(unsigned char* pAlac, int len);
 	//bool Read(unsigned char* pMp3, int maxLen);
@@ -28,6 +28,7 @@ protected:
 	lame_global_flags* _pLameGlobalFlags;
 	uint8_t* _pMp3Buffer;
 	int _nMp3Buffer;
+	int _streamId;
 
 };
 

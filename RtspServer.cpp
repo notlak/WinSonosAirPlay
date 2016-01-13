@@ -397,7 +397,7 @@ void RtspServerConnection::AudioThread()
 	const int BufferSize = 2048;
 	char buffer[BufferSize];
 
-	_transcoder.Init(&_alacConfig);
+	_transcoder.Init(&_alacConfig, 1); // streamId hardcoded to 1
 
 	while (!_stopAudioThread)
 	{
