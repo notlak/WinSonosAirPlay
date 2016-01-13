@@ -163,6 +163,21 @@ void NetworkServerConnection::GetIpAddress(unsigned char* pIpAddress)
 	pIpAddress[3] = sockName.sin_addr.S_un.S_un_b.s_b4;
 }
 
+std::string NetworkServerConnection::GetIpAddress()
+{
+	std::string ip("");
+
+	SOCKADDR_IN sockName;
+	int sockNameLen = sizeof(sockName);
+	getsockname(_socket, (SOCKADDR*)&sockName, &sockNameLen);
+
+	char buff[INET_ADDRSTRLEN];
+
+	ip = inet_ntop(AF_INET, &sockName.sin_addr, buff, INET_ADDRSTRLEN);
+
+	return ip;
+}
+
 bool NetworkServerConnection::Close()
 {
 	_closeConnection = true;

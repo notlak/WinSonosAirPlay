@@ -5,15 +5,15 @@
 #include "stdafx.h"
 #include "WinAirSonos.h"
 #include "WinAirSonosDlg.h"
-#include "AirPlayRTSPServer.h"
 #include "SonosInterface.h"
 #include "RtspServer.h"
 
+//#include "AirPlayRTSPServer.h"
 // live555 (RTSP/RTP server) includes
-#include <BasicUsageEnvironment.hh>
-#include <liveMedia.hh>
-#include <RTSPCommon.hh> // for dateheader(
-#include <Base64.hh>
+//#include <BasicUsageEnvironment.hh>
+//#include <liveMedia.hh>
+//#include <RTSPCommon.hh> // for dateheader(
+//#include <Base64.hh>
 
 #include <string>
 #include <map>
@@ -75,158 +75,6 @@ static void DNSSD_API DNSServiceRegisterCallback(DNSServiceRef sdref, const DNSS
 }
 
 
-/* Now in AirPlayRTSPServer.h|cpp
-class AirPlayRtspServer : public RTSPServer
-{
-public:
-
-	virtual ~AirPlayRtspServer() {}
-
-	static AirPlayRtspServer* createNew(UsageEnvironment& env, Port ourPort,
-		UserAuthenticationDatabase* authDatabase = nullptr,
-		unsigned reclamationSeconds = 65) {
-		int ourSocket = setUpOurSocket(env, ourPort);
-		if (ourSocket == -1) return NULL;
-
-		return new AirPlayRtspServer(env, ourSocket, ourPort, authDatabase, reclamationSeconds);
-	}
-
-	virtual char const* allowedCommandNames() { return "ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, OPTIONS, GET_PARAMETER, SET_PARAMETER, POST, GET"; }
-	
-	class AirPlayRtspClientConnection : public RTSPClientConnection
-	{
-	public:
-
-		AirPlayRtspClientConnection(AirPlayRtspServer& ourServer, int clientSocket, struct sockaddr_in clientAddr)
-			: RTSPClientConnection(ourServer, clientSocket, clientAddr) {}
-
-		virtual void handleCmd_OPTIONS()
-		{
-			std::string request((char*)fRequestBuffer);
-
-			unsigned char rawAppleResp[32];
-			int nRawAppleResp = 0;
-			memset(rawAppleResp, 0, 32);
-
-			size_t challengePos = request.find("Apple-Challenge:", 0);
-
-			if (challengePos != std::string::npos)
-			{
-				challengePos += 17; // "Apple-Challenge: "
-
-				size_t length = request.find('\r', challengePos);
-
-				length -= challengePos;
-
-				std::string challengeB64 = request.substr(challengePos, length);
-				
-				size_t chLen = 0;
-				unsigned char* pChallenge = nullptr;
-
-				Base64Decode(challengeB64.c_str(), &pChallenge, &chLen);
-
-				memcpy(rawAppleResp, pChallenge, chLen);
-				delete[] pChallenge;
-				nRawAppleResp = chLen;
-
-				SOCKADDR_IN sockName;
-				int sockNameLen = sizeof(sockName);
-				getsockname(fOurSocket, (SOCKADDR*)&sockName, &sockNameLen);
-
-				// copy IP address into apple response
-				rawAppleResp[nRawAppleResp++] = sockName.sin_addr.S_un.S_un_b.s_b1;
-				rawAppleResp[nRawAppleResp++] = sockName.sin_addr.S_un.S_un_b.s_b2;
-				rawAppleResp[nRawAppleResp++] = sockName.sin_addr.S_un.S_un_b.s_b3;
-				rawAppleResp[nRawAppleResp++] = sockName.sin_addr.S_un.S_un_b.s_b4;
-
-				// copy mac address in, think this can be same random one used in mDNS advertisement
-
-				rawAppleResp[nRawAppleResp++] = 0x11;
-				rawAppleResp[nRawAppleResp++] = 0x22;
-				rawAppleResp[nRawAppleResp++] = 0x33;
-				rawAppleResp[nRawAppleResp++] = 0x44;
-				rawAppleResp[nRawAppleResp++] = 0x55;
-				rawAppleResp[nRawAppleResp++] = 0x66;
-				rawAppleResp[nRawAppleResp++] = 0x77;
-				rawAppleResp[nRawAppleResp++] = 0x88;
-
-				// load the AirPort Express Private key
-
-				FILE* fKey = fopen("private.key", "rb");
-
-				//EVP_PKEY* privateKey = nullptr;
-				//PEM_read_PrivateKey(fKey, &privateKey, nullptr, nullptr);
-
-				RSA* privateKey = nullptr;
-				PEM_read_RSAPrivateKey(fKey, &privateKey, nullptr, nullptr);
-
-				fclose(fKey);
-
-				// encrypt the apple response
-				unsigned char encAppleResp[1024];
-
-				int encLen = RSA_private_encrypt(32, rawAppleResp, encAppleResp, privateKey, RSA_PKCS1_PADDING);
-
-				free(privateKey);
-
-				char* b64AppleResp = new char[2048];
-
-				Base64Encode(encAppleResp, encLen, b64AppleResp);
-
-				TRACE("%s\n", b64AppleResp);
-
-				snprintf((char*)fResponseBuffer, sizeof fResponseBuffer,
-					"RTSP/1.0 200 OK\r\nCSeq: %s\r\nApple-Response: %s\r\n\r\n",
-					//fCurrentCSeq, dateHeader(), fOurRTSPServer.allowedCommandNames());
-					fCurrentCSeq, b64AppleResp);
-
-				delete[] b64AppleResp;
-			}
-			else
-			{
-				snprintf((char*)fResponseBuffer, sizeof fResponseBuffer,
-					"RTSP/1.0 200 OK\r\nCSeq: %s\r\n\r\n",
-					//fCurrentCSeq, dateHeader(), fOurRTSPServer.allowedCommandNames());
-					fCurrentCSeq);
-			}
-
-		
-		}
-
-
-
-
-	};
-
-protected:
-
-	// called only by createNew();
-	AirPlayRtspServer(UsageEnvironment& env,
-		int ourSocket, Port ourPort,
-		UserAuthenticationDatabase* authDatabase,
-		unsigned reclamationSeconds) :
-		RTSPServer(env, ourSocket, ourPort, authDatabase, reclamationSeconds) {}
-
-	GenericMediaServer::ClientConnection*
-		createNewClientConnection(int clientSocket, struct sockaddr_in clientAddr) {
-		return new AirPlayRtspClientConnection(*this, clientSocket, clientAddr);
-	}
-};
-
-
-static void announceStream(RTSPServer* rtspServer, ServerMediaSession* sms,
-	char const* streamName, char const* inputFileName) {
-	char* url = rtspServer->rtspURL(sms);
-	UsageEnvironment& env = rtspServer->envir();
-	env << "\n\"" << streamName << "\" stream, from the file \""
-		<< inputFileName << "\"\n";
-	env << "Play this stream using the URL \"" << url << "\"\n";
-	delete[] url;
-}
-
-*/
-
-
 // CWinAirSonosApp initialization
 
 BOOL CWinAirSonosApp::InitInstance()
@@ -260,8 +108,6 @@ BOOL CWinAirSonosApp::InitInstance()
 	// TODO: You should modify this string to be something appropriate
 	// such as the name of your company or organization
 	SetRegistryKey(_T("KODR"));
-
-	
 
 	const int RTSP_PORT = 50001;
 	/* WAS THIS

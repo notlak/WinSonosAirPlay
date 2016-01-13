@@ -1,5 +1,7 @@
 #pragma once
 
+#include <WS2tcpip.h>
+
 #include <thread>
 #include <list>
 #include <map>
@@ -66,6 +68,7 @@ public:
 	bool Close();
 
 	void GetIpAddress(unsigned char* pIpAddress); // ip address of this server
+	std::string GetIpAddress();
 
 	virtual void Transmit(const char* buff, int len);
 	virtual void SendResponse(const NetworkResponse& response);
@@ -152,6 +155,9 @@ public:
 
 	bool StartListening(const char* ip, int port)
 	{
+		// store the port number in case we need it
+		_port = port;
+
 		sockaddr_in addr;
 
 		_listeningSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -220,5 +226,6 @@ protected:
 	SOCKET _listeningSocket;
 	std::thread* _pListeningThread;
 	bool _stopServer;
+	int _port;
 };
 
