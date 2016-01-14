@@ -45,6 +45,7 @@ public:
 
 	static StreamingServer* GetStreamingServer();
 	static void Delete();
+	static int GetStreamId();
 
 	void CreateStream(int streamId);
 
@@ -60,6 +61,7 @@ public:
 	std::mutex _streamMapMutex;
 
 	static StreamingServer* InstancePtr;
+	static int NextStreamId;
 
 };
 

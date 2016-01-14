@@ -162,10 +162,27 @@ private:
 // SonosInterface implementation
 ///////////////////////////////////////////////////////////////////////////////
 
-SonosInterface::SonosInterface()
-	: _pSearchThread(nullptr), _shutdown(false), _pClient(nullptr)
+SonosInterface* SonosInterface::InstancePtr = nullptr;
+
+SonosInterface* SonosInterface::GetInstance()
 {
-	CoInitialize(nullptr);
+	if (!InstancePtr)
+	{
+		InstancePtr = new SonosInterface();
+	}
+
+	return InstancePtr;
+}
+
+void SonosInterface::Delete()
+{
+	delete InstancePtr;
+}
+
+SonosInterface::SonosInterface()
+	: _pSearchThread(nullptr), _shutdown(false), _pClient(nullptr), 
+	_searching(false), _searchCompleted(false)
+{
 }
 
 SonosInterface::~SonosInterface()
@@ -178,7 +195,7 @@ SonosInterface::~SonosInterface()
 	if (_pSearchThread)
 		delete _pSearchThread;
 
-	CoUninitialize();
+	//CoUninitialize();
 }
 
 
@@ -217,18 +234,22 @@ void SonosInterface::SearchThread()
 
 		if (_searchCompleted)
 		{
+			CancelAsyncSearch();
+
 			//_pUPnPDeviceFinder->CancelAsyncFind(_lFindData);
 			//_searchCompleted = false;
 			//_searching = false;
 		}
 
-		// we need to pump messages for the serach to work apparently
+		// we need to pump messages for the seach to work apparently
 
 		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
 			DispatchMessage(&msg);
 
 		Sleep(500);
 	}
+
+	CoUninitialize();
 
 }
 
@@ -237,6 +258,8 @@ bool SonosInterface::StartAsyncSearch()
 	HRESULT hr = S_OK;
 	bool ok = false;
 
+	CoInitialize(nullptr);
+
 	_searchCompleted = false;
 
 	_pUPnPDeviceFinderCallback = new CUPnPDeviceFinderCallback(this);
@@ -244,7 +267,6 @@ bool SonosInterface::StartAsyncSearch()
 	if (NULL != _pUPnPDeviceFinderCallback)
 	{
 		_pUPnPDeviceFinderCallback->AddRef();
-
 		hr = CoCreateInstance(CLSID_UPnPDeviceFinder, NULL, CLSCTX_INPROC_SERVER,
 			IID_IUPnPDeviceFinder, reinterpret_cast<void**>(&_pUPnPDeviceFinder));
 
@@ -269,6 +291,7 @@ bool SonosInterface::StartAsyncSearch()
 	{
 		_pUPnPDeviceFinderCallback->Release();
 	}
+
 
 	return ok;
 }

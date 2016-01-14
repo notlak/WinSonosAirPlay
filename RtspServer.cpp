@@ -1,8 +1,11 @@
 #include "stdafx.h"
 #include "RtspServer.h"
+#include "StreamingServer.h"
+#include "SonosInterface.h"
 
 #include <sstream>
 #include <openssl\pem.h>
+
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -67,8 +70,8 @@ static int Base64Encode(const unsigned char* buffer, size_t length, char* b64tex
 // RtspServer
 ///////////////////////////////////////////////////////////////////////////////
 
-RtspServer::RtspServer()
-	: _airPortExpressKey(nullptr)
+RtspServer::RtspServer(const std::string& sonosUdn)
+	: _airPortExpressKey(nullptr), _sonosUdn(sonosUdn)
 {
 	ASSERT(LoadAirPortExpressKey());
 }
@@ -320,8 +323,20 @@ TRACE("Timing socket init\n");
 
 		connection.SendResponse(resp);
 
-		pConn->_pAudioThread = new std::thread(&RtspServerConnection::AudioThread, pConn);
+		// get a streamId
 
+		pConn->_streamId = StreamingServer::GetStreamId();
+
+		// tell the sonos to start playing the stream
+
+		std::ostringstream uri;
+		uri << "http://" << connection.GetIpAddress() << ":" << _port <<
+			"/" << pConn->_streamId << "/listen.m3u";
+
+		SonosInterface::GetInstance()->SetAvTransportUri(_sonosUdn.c_str(), uri.str().c_str(), "AirPlay");
+		SonosInterface::GetInstance()->Play(_sonosUdn.c_str());
+
+		pConn->_pAudioThread = new std::thread(&RtspServerConnection::AudioThread, pConn);
 	}
 }
 
@@ -409,7 +424,7 @@ void RtspServerConnection::AudioThread()
 	const int BufferSize = 2048;
 	char buffer[BufferSize];
 
-	_transcoder.Init(&_alacConfig, 1); // streamId hardcoded to 1
+	_transcoder.Init(&_alacConfig, _streamId); // streamId hardcoded to 1
 
 	while (!_stopAudioThread)
 	{

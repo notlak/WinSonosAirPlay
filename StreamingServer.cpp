@@ -8,12 +8,12 @@
 #define new DEBUG_NEW
 #endif
 
-
 ///////////////////////////////////////////////////////////////////////////////
 // StreamingServer implementation - this is a Singleton
 ///////////////////////////////////////////////////////////////////////////////
 
 StreamingServer* StreamingServer::InstancePtr = nullptr;
+int StreamingServer::NextStreamId = 0;
 
 StreamingServer* StreamingServer::GetStreamingServer()
 {
@@ -26,6 +26,11 @@ StreamingServer* StreamingServer::GetStreamingServer()
 void StreamingServer::Delete()
 {
 	delete InstancePtr;
+}
+
+int StreamingServer::GetStreamId()
+{
+	return NextStreamId++;
 }
 
 StreamingServer::StreamingServer()

@@ -6,13 +6,6 @@
 #include <list>
 #include <mutex>
 
-class SonosInterfaceClient
-{
-public:
-	virtual void OnNewDevice(const SonosDevice& dev) {}
-	virtual void OnDeviceRemoved(const SonosDevice& dev) {}
-};
-
 class SonosDevice
 {
 public:
@@ -45,11 +38,21 @@ public:
 	std::string _coordinator; // device UDN
 };
 
+class SonosInterfaceClient
+{
+public:
+	virtual void OnNewDevice(const SonosDevice& dev) {}
+	virtual void OnDeviceRemoved(const SonosDevice& dev) {}
+};
+
 class SonosInterface
 {
 public:
 	SonosInterface();
 	virtual ~SonosInterface();
+
+	static SonosInterface* GetInstance();
+	static void Delete();
 
 	void RegisterClient(SonosInterfaceClient* pClient) { _pClient = pClient; }
 
@@ -115,5 +118,8 @@ protected:
 	bool _searching;
 	bool _searchCompleted;
 	bool _shutdown;
+
+	static SonosInterface* InstancePtr;
+
 };
 

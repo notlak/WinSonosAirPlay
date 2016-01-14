@@ -33,13 +33,15 @@ public:
 	bool _stopAudioThread;
 
 	CTranscoder _transcoder;
+
+	int _streamId;
 };
 
 class RtspServer :
 	public NetworkServer<RtspServerConnection>
 {
 public:
-	RtspServer();
+	RtspServer(const std::string& sonosUdn);
 	virtual ~RtspServer();
 
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request);
@@ -58,6 +60,6 @@ protected:
 	void HandleTeardown(NetworkServerConnection& connection, NetworkRequest& request);
 
 	RSA* _airPortExpressKey;
-
+	std::string _sonosUdn;
 };
 

@@ -18,8 +18,6 @@
 #include <string>
 #include <map>
 
-// mdns/bonjour stuff
-#include "c:\program files\Bonjour SDK\include\dns_sd.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -39,6 +37,28 @@ CWinAirSonosApp::CWinAirSonosApp()
 {
 	// TODO: add construction code here, 
 	// Place all significant initialization in InitInstance
+}
+
+
+CWinAirSonosApp::~CWinAirSonosApp()
+{
+	// stop advertising
+	for (auto it = _sdRefMap.begin(); it != _sdRefMap.end(); ++it)
+	{
+		DNSServiceRefDeallocate(it->second);
+	}
+
+	_sdRefMap.clear();
+
+	// stop the airplay servers
+	for (auto it = _airplayServerMap.begin(); it != _airplayServerMap.end(); ++it)
+	{
+		delete it->second;
+	}
+
+	_sdRefMap.clear();
+
+	SonosInterface::Delete();
 }
 
 
@@ -74,9 +94,89 @@ static void DNSSD_API DNSServiceRegisterCallback(DNSServiceRef sdref, const DNSS
 	//if (!(flags & kDNSServiceFlagsMoreComing)) fflush(stdout);
 }
 
+void CWinAirSonosApp::InitmDNS()
+{
+	std::map<std::string, std::string> txtValuesMap = {
+		{ "txtvers", "1" },
+		{ "ch","2" },
+		{ "cn","0,1" },
+		{ "et","0,1" },
+		{ "md","0" },
+		{ "pw","false" },
+		{ "sr","44100" },
+		{ "ss","16" },
+		{ "tp","TCP,UDP" },
+		{ "vs","105.1" },
+		{ "am","AirPort4,107" },
+		{ "ek","1" },
+		{ "sv","false" },
+		{ "da","true" },
+		{ "vn","65537" },
+		{ "fv","76400.10" },
+		{ "sf","0x5" }
+	};
+
+	TXTRecordCreate(&_txtRef, TXTBuffLen, _txtBuff);
+
+	//for_each(txtValuesMap.begin, txtValuesMap.end(), []() {});
+
+	for (const auto& kv : txtValuesMap) // C++11 niftyness
+	{
+		TXTRecordSetValue(&_txtRef, kv.first.c_str(), (uint8_t)kv.second.length(), kv.second.c_str());
+	}
+
+}
+
+void CWinAirSonosApp::AdvertiseServer(std::string name, int port)
+{
+	DNSServiceRef sdRef;
+
+	std::string identifier = "1122334455667788@" + name;
+
+	DNSServiceErrorType err = DNSServiceRegister(&sdRef, 0 /*flags*/, 0 /*interface index*/, identifier.c_str(), "_raop._tcp", nullptr, nullptr, htons(port), TXTRecordGetLength(&_txtRef), TXTRecordGetBytesPtr(&_txtRef),
+		DNSServiceRegisterCallback, nullptr);
+
+	if (err != kDNSServiceErr_NoError)
+		TRACE("Error: unable to register service with mdns\n");
+	else
+		_sdRefMap[name] = sdRef;
+
+}
+
 void CWinAirSonosApp::OnNewDevice(const SonosDevice& dev)
 {
+	// create RtspServer
 
+	RtspServer* pAirPlayServer = new RtspServer(dev._udn);
+
+	const int minPort = 50002;
+	const int maxPort = 65535;
+
+	int port = minPort + (rand() * (maxPort - minPort + 1)) / RAND_MAX;
+
+	bool isListening = false;
+
+	for (int i = 0; i < 5 && !isListening; i++)
+	{
+		if (pAirPlayServer->StartListening(nullptr, port))
+		{
+			isListening = true;
+		}
+		else
+		{
+			port += 1;
+
+			if (port > maxPort)
+				port = minPort;
+		}
+	}
+
+	if (isListening)
+		_airplayServerMap[dev._name] = pAirPlayServer;
+
+	// advertise it via mDNS
+
+	AdvertiseServer(dev._name, port);
 }
 
 void CWinAirSonosApp::OnDeviceRemoved(const SonosDevice& dev)
@@ -119,10 +219,6 @@ BOOL CWinAirSonosApp::InitInstance()
 	// such as the name of your company or organization
 	SetRegistryKey(_T("KODR"));
 
-	const int RTSP_PORT = 50001;
-	const int MP3_PORT = 50002;
-
-
 	//------------------------------------------------------------------------------
 
 
@@ -147,7 +243,7 @@ BOOL CWinAirSonosApp::InitInstance()
     fv: '76400.10', // ? from ApEx; maybe AirPort software version (7.6.4)
     sf: '0x5'       // ? from ApEx
 	*/
-
+/*
 	std::map<std::string, std::string> txtValuesMap = { 
 		{"txtvers", "1"},
 		{"ch","2"},
@@ -183,7 +279,7 @@ BOOL CWinAirSonosApp::InitInstance()
 
 	DNSServiceRef sdRef;
 
-	DNSServiceErrorType err = DNSServiceRegister(&sdRef, 0 /*flags*/, 0 /*interface index*/, "1122334455667788@Room", "_raop._tcp", nullptr, nullptr, htons(RTSP_PORT), TXTRecordGetLength(&txtRef), TXTRecordGetBytesPtr(&txtRef),
+	DNSServiceErrorType err = DNSServiceRegister(&sdRef, 0, 0, "1122334455667788@Room", "_raop._tcp", nullptr, nullptr, htons(RTSP_PORT), TXTRecordGetLength(&txtRef), TXTRecordGetBytesPtr(&txtRef),
 		DNSServiceRegisterCallback, nullptr);
 
 	if (err != kDNSServiceErr_NoError)
@@ -191,11 +287,21 @@ BOOL CWinAirSonosApp::InitInstance()
 	
 	TXTRecordDeallocate(&txtRef);
 
+*/
+	const int MP3_PORT = 50001;
+	const int RTSP_PORT = 50002;
+
+	InitmDNS();
+
+	SonosInterface* pSonosInterface = SonosInterface::GetInstance();
+	pSonosInterface->RegisterClient(this);
+	pSonosInterface->Init();
+
 	StreamingServer* pStreamingServer = StreamingServer::GetStreamingServer();
 	pStreamingServer->StartListening(nullptr, MP3_PORT);
 
-	RtspServer* pAirPlayServer = new RtspServer();
-	pAirPlayServer->StartListening(nullptr, RTSP_PORT);
+	//RtspServer* pAirPlayServer = new RtspServer();
+	//pAirPlayServer->StartListening(nullptr, RTSP_PORT);
 
 	// test SonosInterface
 	//SonosInterface sonos;
@@ -224,11 +330,11 @@ BOOL CWinAirSonosApp::InitInstance()
 
 	// unregister mdns stuff
 
-	DNSServiceRefDeallocate(sdRef);
+	//DNSServiceRefDeallocate(sdRef);
 
 	// kill the AirPlay (music producing end first)
 
-	delete pAirPlayServer;
+	//delete pAirPlayServer;
 
 	// kill the streaming server
 
