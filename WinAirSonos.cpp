@@ -5,7 +5,6 @@
 #include "stdafx.h"
 #include "WinAirSonos.h"
 #include "WinAirSonosDlg.h"
-#include "SonosInterface.h"
 #include "RtspServer.h"
 #include "StreamingServer.h"
 
@@ -75,6 +74,16 @@ static void DNSSD_API DNSServiceRegisterCallback(DNSServiceRef sdref, const DNSS
 	//if (!(flags & kDNSServiceFlagsMoreComing)) fflush(stdout);
 }
 
+void CWinAirSonosApp::OnNewDevice(const SonosDevice& dev)
+{
+
+}
+
+void CWinAirSonosApp::OnDeviceRemoved(const SonosDevice& dev)
+{
+
+}
+
 
 // CWinAirSonosApp initialization
 
@@ -113,52 +122,8 @@ BOOL CWinAirSonosApp::InitInstance()
 	const int RTSP_PORT = 50001;
 	const int MP3_PORT = 50002;
 
-	/* WAS THIS
-	// start an RTSP server
-	TaskScheduler* scheduler = BasicTaskScheduler::createNew();
-	UsageEnvironment* rtspEnv = BasicUsageEnvironment::createNew(*scheduler);
-
-	AirPlayRTSPServer* rtspServer = AirPlayRTSPServer::createNew(*rtspEnv, RTSP_PORT); //default port to 50,001 for now AuthDB = nullptr
-	if (rtspServer == nullptr) {
-		TRACE("Failed to create RTSP server: %s\n", rtspEnv->getResultMsg());
-		// ### graceful exit
-	}
-	END */
-
-	//----------------------------- MP3 stream test --------------------------------
-
-//	{
-//		char const* descriptionString = "Session streamed by WinAirSonos";
-//		char const* streamName = "mp3AudioTest";
-//		char const* inputFileName = "test.mp3";
-//
-//		Boolean reuseFirstSource = False;
-//
-//		ServerMediaSession* sms
-//			= ServerMediaSession::createNew(*rtspEnv, streamName, streamName,
-//				descriptionString);
-//		Boolean useADUs = False;
-//
-//#ifdef STREAM_USING_ADUS
-//		useADUs = True;
-//#ifdef INTERLEAVE_ADUS
-//		unsigned char interleaveCycle[] = { 0,2,1,3 }; // or choose your own...
-//		unsigned const interleaveCycleSize
-//			= (sizeof interleaveCycle) / (sizeof(unsigned char));
-//		interleaving = new Interleaving(interleaveCycleSize, interleaveCycle);
-//#endif
-//#endif
-//		sms->addSubsession(MP3AudioFileServerMediaSubsession
-//			::createNew(*rtspEnv, inputFileName, reuseFirstSource,
-//				useADUs, nullptr));
-//		rtspServer->addServerMediaSession(sms);
-//
-//		announceStream(rtspServer, sms, streamName, inputFileName);
-//	}
-
 
 	//------------------------------------------------------------------------------
-
 
 
 	// advertise a particular service via mdns
@@ -210,6 +175,7 @@ BOOL CWinAirSonosApp::InitInstance()
 	TXTRecordCreate(&txtRef, TXTBufferLen, txtBuffer);
 
 	//for_each(txtValuesMap.begin, txtValuesMap.end(), []() {});
+
 	for (const auto& kv : txtValuesMap) // C++11 niftyness
 	{
 		TXTRecordSetValue(&txtRef, kv.first.c_str(), (uint8_t)kv.second.length(), kv.second.c_str());
@@ -228,23 +194,14 @@ BOOL CWinAirSonosApp::InitInstance()
 	StreamingServer* pStreamingServer = StreamingServer::GetStreamingServer();
 	pStreamingServer->StartListening(nullptr, MP3_PORT);
 
-	RtspServer airPlayServer;
-	airPlayServer.StartListening(nullptr, RTSP_PORT);
+	RtspServer* pAirPlayServer = new RtspServer();
+	pAirPlayServer->StartListening(nullptr, RTSP_PORT);
 
 	// test SonosInterface
 	//SonosInterface sonos;
 	//sonos.Init();
-
 	//sonos.FindSpeakers();
-
 	//sonos.Test();
-
-	// test HttpRequest
-	/*std::string doc;
-	bool ok = sonos.HttpRequest("95.211.70.200", 80, "/tools/website-speed-test", doc);*/
-
-
-	//>>>>>>>>>>>> rtspEnv->taskScheduler().doEventLoop();
 
 	CWinAirSonosDlg dlg;
 	m_pMainWnd = &dlg;
@@ -268,6 +225,14 @@ BOOL CWinAirSonosApp::InitInstance()
 	// unregister mdns stuff
 
 	DNSServiceRefDeallocate(sdRef);
+
+	// kill the AirPlay (music producing end first)
+
+	delete pAirPlayServer;
+
+	// kill the streaming server
+
+	StreamingServer::Delete();
 
 	// kill RTSP server
 	// ### can't: delete rtspServer;

@@ -44,6 +44,7 @@ public:
 	virtual ~StreamingServer();
 
 	static StreamingServer* GetStreamingServer();
+	static void Delete();
 
 	void CreateStream(int streamId);
 
@@ -56,6 +57,7 @@ public:
 	void TransmitStreamData(int streamId, unsigned char* pData, int len);
 
 	std::map<int, StreamingServerStream*> _streamMap;
+	std::mutex _streamMapMutex;
 
 	static StreamingServer* InstancePtr;
 

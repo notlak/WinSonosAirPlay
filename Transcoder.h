@@ -21,7 +21,8 @@ public:
 protected:
 
 	ALACDecoder* _pAlacDecoder;
-	BitBuffer* _pAlacBitBuffer;
+	BitBuffer*	 _pAlacBitBuffer;
+	int			_nInputPacketBytes;
 	uint8_t*    _pAlacInputBuffer;
 	uint8_t*    _pAlacOutputBuffer;
 	ALACSpecificConfig _alacConfig;
@@ -29,6 +30,5 @@ protected:
 	uint8_t* _pMp3Buffer;
 	int _nMp3Buffer;
 	int _streamId;
-
 };
 

@@ -34,6 +34,12 @@ distribution.
 #   include <cstdarg>
 #endif
 
+/*
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+*/
+
 #if defined(_MSC_VER) && (_MSC_VER >= 1400 ) && (!defined WINCE)
 	// Microsoft Visual Studio, version 2005 and higher. Not WinCE.
 	/*int _snprintf_s(

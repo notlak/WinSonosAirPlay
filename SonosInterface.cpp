@@ -3,17 +3,25 @@
 #include "tinyxml2.h"
 
 #include <winsock2.h>
-#include <UPnP.h>
+#include <ws2tcpip.h>
 
-#include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <thread>
 
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
 #pragma comment(lib, "user32.lib")
 
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
 const char* AvTransportEndPoint = "/MediaRenderer/AVTransport/Control";
+
+///////////////////////////////////////////////////////////////////////////////
+// CUPnPDeviceFinderCallback implements IUPnPDeviceFinderCallback
+///////////////////////////////////////////////////////////////////////////////
 
 class CUPnPDeviceFinderCallback : public IUPnPDeviceFinderCallback
 {
@@ -150,21 +158,128 @@ private:
 	SonosInterface* m_pSonosInt;
 };
 
+///////////////////////////////////////////////////////////////////////////////
+// SonosInterface implementation
+///////////////////////////////////////////////////////////////////////////////
+
 SonosInterface::SonosInterface()
+	: _pSearchThread(nullptr), _shutdown(false), _pClient(nullptr)
 {
 	CoInitialize(nullptr);
 }
 
-
 SonosInterface::~SonosInterface()
 {
+	_shutdown = true;
+
+	if (_searching)
+		CancelAsyncSearch();
+
+	if (_pSearchThread)
+		delete _pSearchThread;
+
 	CoUninitialize();
 }
 
 
 bool SonosInterface::Init()
 {
-	return false;
+	// start the search thread
+
+	_pSearchThread = new std::thread(&SonosInterface::SearchThread, this);
+
+	return true;
+}
+
+void SonosInterface::SearchThread()
+{
+	DWORD lastSearchTime = 0;
+	const DWORD SearchInterval = 5 * 60 * 1000;
+	MSG msg;
+
+	while (!_shutdown)
+	{
+		DWORD now = GetTickCount();
+
+		if (!_searching && now - lastSearchTime > SearchInterval)
+		{
+
+			if (StartAsyncSearch())
+			{
+				lastSearchTime = now; // move to actual finish
+				_searching = true;
+			}
+			else
+			{
+				TRACE("Error: StartAsyncSearch() failed\n");
+			}
+		}
+
+		if (_searchCompleted)
+		{
+			//_pUPnPDeviceFinder->CancelAsyncFind(_lFindData);
+			//_searchCompleted = false;
+			//_searching = false;
+		}
+
+		// we need to pump messages for the serach to work apparently
+
+		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+			DispatchMessage(&msg);
+
+		Sleep(500);
+	}
+
+}
+
+bool SonosInterface::StartAsyncSearch()
+{
+	HRESULT hr = S_OK;
+	bool ok = false;
+
+	_searchCompleted = false;
+
+	_pUPnPDeviceFinderCallback = new CUPnPDeviceFinderCallback(this);
+
+	if (NULL != _pUPnPDeviceFinderCallback)
+	{
+		_pUPnPDeviceFinderCallback->AddRef();
+
+		hr = CoCreateInstance(CLSID_UPnPDeviceFinder, NULL, CLSCTX_INPROC_SERVER,
+			IID_IUPnPDeviceFinder, reinterpret_cast<void**>(&_pUPnPDeviceFinder));
+
+		if (SUCCEEDED(hr))
+		{
+			hr = _pUPnPDeviceFinder->CreateAsyncFind(_bstr_t("urn:schemas-upnp-org:device:ZonePlayer:1"), 0, _pUPnPDeviceFinderCallback, &_lFindData);
+
+			if (SUCCEEDED(hr))
+			{
+				hr = _pUPnPDeviceFinder->StartAsyncFind(_lFindData);
+
+				if (SUCCEEDED(hr))
+					ok = true;
+			}
+		}
+		else
+		{
+			_pUPnPDeviceFinder->Release();
+		}
+	}
+	else
+	{
+		_pUPnPDeviceFinderCallback->Release();
+	}
+
+	return ok;
+}
+
+void SonosInterface::CancelAsyncSearch()
+{
+	_pUPnPDeviceFinder->CancelAsyncFind(_lFindData);
+	_pUPnPDeviceFinder->Release();
+	_pUPnPDeviceFinderCallback->Release();
+	_searchCompleted = false;
+	_searching = false;
 }
 
 bool SonosInterface::FindSpeakers()
@@ -308,7 +423,8 @@ bool SonosInterface::NetworkRequest(const char* ip, int port, const char* path, 
 
 	// prepare inet address from URL of document
 	sockaddr_in addr;
-	addr.sin_addr.s_addr = inet_addr(ip); // put here ip address of device
+	//addr.sin_addr.s_addr = inet_addr(ip); // put here ip address of device
+	inet_pton(AF_INET, ip, &addr.sin_addr); // put here ip address of device
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port); // put here port for connection
 
@@ -752,17 +868,28 @@ void SonosInterface::UpnpDeviceAdded(const char* pUdn, const char* pUrl)
 				ParseZoneTopology(xml.c_str());
 			}
 		}
+
+		SonosDevice d;
+		if (_pClient && GetDeviceByUdn(pUdn, d) && d._isCoordinator)
+		{
+			_pClient->OnNewDevice(d);
+		}
 	}
 }
 
 void SonosInterface::UpnpDeviceRemoved(const char* pUdn)
 {
-	//### do something 
+	SonosDevice d;
+
+	if (_pClient && GetDeviceByUdn(pUdn, d) && d._isCoordinator)
+	{
+		_pClient->OnDeviceRemoved(d);
+	}
 }
 
 void SonosInterface::UpnpSearchComplete()
 {
-
+	_searchCompleted = true;
 }
 
 bool SonosInterface::Play(const char* pUdn)

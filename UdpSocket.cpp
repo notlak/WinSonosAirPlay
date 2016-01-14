@@ -1,6 +1,9 @@
 #include "stdafx.h"
 #include "UdpSocket.h"
 
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
 
 CUdpSocket::CUdpSocket()
 	:_socketListening(false), _socket(-1), _port(-1)
@@ -20,7 +23,7 @@ bool CUdpSocket::Initialise(int port)
 	if (port == -1) // generate random port
 	{
 		const int MinPort = 49152;
-		const int MaxPort = 65535;
+		const int MaxPort = 65500;
 
 		port = MinPort + (rand() * (MaxPort - MinPort)) / RAND_MAX;
 	}
@@ -37,12 +40,13 @@ bool CUdpSocket::Initialise(int port)
 	addr.sin_family = AF_INET;
 	addr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);
 
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; i < 5; i++)
 	{
 		addr.sin_port = htons(port);
 
 		if (bind(_socket, (struct sockaddr*)&addr, sizeof(addr)) < 0)
 		{
+			TRACE("Failed to create UDP socket on port: %d\n", port);
 			port = (port + 1) % 65536;
 		}
 		else

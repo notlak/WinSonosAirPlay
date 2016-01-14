@@ -10,12 +10,17 @@
 
 #include "resource.h"		// main symbols
 
+#include "SonosInterface.h"
+#include <map>
+#include <string>
+
+class RtspServer;
 
 // CWinAirSonosApp:
 // See WinAirSonos.cpp for the implementation of this class
 //
 
-class CWinAirSonosApp : public CWinApp
+class CWinAirSonosApp : public CWinApp, public SonosInterfaceClient
 {
 public:
 	CWinAirSonosApp();
@@ -24,9 +29,16 @@ public:
 public:
 	virtual BOOL InitInstance();
 
+	virtual void OnNewDevice(const SonosDevice& dev);
+	virtual void OnDeviceRemoved(const SonosDevice& dev);
+
 // Implementation
 
 	DECLARE_MESSAGE_MAP()
+
+protected:
+
+	std::map<std::string, RtspServer*> _airplayServerMap;
 };
 
 extern CWinAirSonosApp theApp;

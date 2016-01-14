@@ -4,6 +4,11 @@
 #include <sstream>
 #include <openssl\pem.h>
 
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+
 static int Base64Decode(const char* b64message, unsigned char** buffer, size_t* length)
 {
 	BIO *bio, *b64;
@@ -200,7 +205,7 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 
 		RSA_private_decrypt(encKeyLen, encKey, pRtspServerConnection->_aesKey, _airPortExpressKey, RSA_PKCS1_OAEP_PADDING);
 
-		free(encKey);
+		delete[] encKey;
 	}
 
 	pos = content.find("aesiv:");
@@ -219,6 +224,8 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 		Base64Decode(b64AesIv.c_str(), &iv, &ivLen);
 
 		memcpy(pRtspServerConnection->_aesIv, iv, ivLen);
+
+		delete[] iv;
 	}
 
 	// parse the codec parameters for ALAC
@@ -283,8 +290,11 @@ void RtspServer::HandleSetup(NetworkServerConnection& connection, NetworkRequest
 	pConn->_pControlSocket = new CUdpSocket();
 	pConn->_pTimingSocket = new CUdpSocket();
 
+TRACE("Audio socket init\n");
 	pConn->_pAudioSocket->Initialise();
+TRACE("Control socket init\n");
 	pConn->_pControlSocket->Initialise();
+TRACE("Timing socket init\n");
 	pConn->_pTimingSocket->Initialise();
 
 
@@ -384,6 +394,8 @@ RtspServerConnection::~RtspServerConnection()
 	if (_pAudioThread)
 		_pAudioThread->join();
 
+	delete _pAudioThread;
+
 	delete _pAudioSocket;
 	delete _pControlSocket;
 	delete _pTimingSocket;
@@ -410,7 +422,7 @@ void RtspServerConnection::AudioThread()
 			DecryptAudio((unsigned char*)buffer, nBytes, seq);
 			_transcoder.Write((unsigned char*)buffer + 12, nBytes - 12);
 
-			TRACE("Received %d bytes from Audio port Seq:%d\n", nBytes, seq);
+			//TRACE("Received %d bytes from Audio port Seq:%d\n", nBytes, seq);
 		}
 
 		nBytes = _pControlSocket->Read(buffer, BufferSize);

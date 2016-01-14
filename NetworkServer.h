@@ -7,6 +7,11 @@
 #include <map>
 #include <mutex>
 
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+
 ///////////////////////////////////////////////////////////////////////////////
 // NetworkRequest
 ///////////////////////////////////////////////////////////////////////////////
@@ -63,12 +68,14 @@ public:
 
 	virtual ~NetworkServerConnection();
 
-	bool Initialise();
+	bool Initialise(int connectionId);
 
 	bool Close();
 
 	void GetIpAddress(unsigned char* pIpAddress); // ip address of this server
 	std::string GetIpAddress();
+
+	int GetId() { return _id; }
 
 	virtual void Transmit(const char* buff, int len);
 	virtual void SendResponse(const NetworkResponse& response);
@@ -105,10 +112,11 @@ protected:
 	std::mutex _transmitMutex;
 	std::condition_variable _transmitCv;
 	std::list<TransmitBuffer*> _txQueue;
-	//static const int RxBuffSize = 8192;
 	int _rxBuffSize;
 	char* _pRxBuff;
 	int _nRxBytes;
+	int _id;
+
 	NetworkRequest _networkRequest;
 };
 
@@ -120,6 +128,7 @@ class NetworkServerInterface // this is used to get over the problem of having a
 {
 public:
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request) = 0;
+	virtual void RemoveConnection(int connectionId) = 0;
 
 };
 
@@ -131,7 +140,7 @@ template<class ConnectionType>
 class NetworkServer : public NetworkServerInterface
 {
 public:
-	NetworkServer() :_pListeningThread(nullptr), _stopServer(false), _listeningSocket(INVALID_SOCKET) {}
+	NetworkServer() :_pListeningThread(nullptr), _stopServer(false), _listeningSocket(INVALID_SOCKET), _nextConnectionId(0) {}
 
 	virtual ~NetworkServer()
 	{
@@ -142,6 +151,10 @@ public:
 
 		_pListeningThread->join();
 		delete _pListeningThread;
+
+		// close all the connections
+
+		std::lock_guard<std::mutex> lock(_connectionListMutex);
 
 		while (_connectionList.size() > 0)
 		{
@@ -171,7 +184,7 @@ public:
 		if (ip == nullptr || ip[0] == '\0')
 			addr.sin_addr.S_un.S_addr = INADDR_ANY;
 		else
-			inet_pton(AF_INET, ip, &addr); // ### todo IPv6 support assume IPv4 for now
+			inet_pton(AF_INET, ip, &addr.sin_addr); // ### todo IPv6 support assume IPv4 for now
 
 		if (bind(_listeningSocket, (sockaddr*)&addr, sizeof addr))
 		{
@@ -187,7 +200,6 @@ public:
 			return false;
 		}
 
-
 		// start a thread to accept connections
 
 		_pListeningThread = new std::thread(&NetworkServer::ListeningThread, this);
@@ -195,7 +207,28 @@ public:
 		return true;
 	}
 
+
+	// from NetworkServerInterface
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request) {}
+	virtual void RemoveConnection(int connectionId)
+	{
+		// lock the list first
+		std::lock_guard<std::mutex> lock(_connectionListMutex);
+
+		// find the right connection
+
+		for (auto it = _connectionList.begin(); it != _connectionList.end(); ++it)
+		{
+			if ((*it)->GetId() == connectionId)
+			{
+				NetworkServerConnection* pConn = *it;
+				_connectionList.erase(it);
+				pConn->Close();
+				delete pConn;
+				break;
+			}
+		}
+	}
 
 protected:
 
@@ -210,19 +243,28 @@ protected:
 
 			if (INVALID_SOCKET != connectionSocket)
 			{
+
 				// create new NetworkServerConnection
 
 				ConnectionType* pConnection =
 					new ConnectionType(this, connectionSocket, remoteSockAddr);
 
-				pConnection->Initialise();
+				pConnection->Initialise(_nextConnectionId);
+				_nextConnectionId++;
+
+				// lock the list first
+				std::lock_guard<std::mutex> lock(_connectionListMutex);
 
 				_connectionList.push_back(pConnection);
 			}
 		}
 	}
 
+	int _nextConnectionId;
+
 	std::list<NetworkServerConnection*> _connectionList;
+	std::mutex _connectionListMutex;
+
 	SOCKET _listeningSocket;
 	std::thread* _pListeningThread;
 	bool _stopServer;

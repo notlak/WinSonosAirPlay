@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <sstream>
 
+#ifdef _DEBUG
 #define new DEBUG_NEW
+#endif
 
 /*
 template<class ConnectionType>
@@ -111,13 +113,14 @@ void NetworkServer<ConnectionType>::ListeningThread()
 
 NetworkServerConnection::NetworkServerConnection(NetworkServerInterface* pServerInterface, SOCKET socket, SOCKADDR_IN& remoteAddr)
 	: _pServer(pServerInterface),
+	_id(-1),
 	_socket(socket),
 	_remoteAddr(remoteAddr),
 	_closeConnection(false),
 	_pReadThread(nullptr),
 	_pTransmitThread(nullptr),
 	_nRxBytes(0),
-	_rxBuffSize(8192)
+	_rxBuffSize(32768)
 {
 	//_pRxBuff = new char[RxBuffSize];
 	_pRxBuff = new char[_rxBuffSize];
@@ -126,7 +129,9 @@ NetworkServerConnection::NetworkServerConnection(NetworkServerInterface* pServer
 
 NetworkServerConnection::~NetworkServerConnection()
 {
-	Close();
+	// Close() should already have been called, if not - do it now
+	if (!_closeConnection)
+		Close();
 
 	while (_txQueue.size() > 0)
 	{
@@ -140,8 +145,10 @@ NetworkServerConnection::~NetworkServerConnection()
 	delete _pTransmitThread;
 }
 
-bool NetworkServerConnection::Initialise()
+bool NetworkServerConnection::Initialise(int connectionId)
 {
+	_id = connectionId;
+
 	// start the threads
 
 	_pReadThread = new std::thread(&NetworkServerConnection::ReadThread, this);
@@ -182,13 +189,16 @@ bool NetworkServerConnection::Close()
 {
 	_closeConnection = true;
 
+	// must wake the Tx thread so it can exit
+	_transmitCv.notify_all();
+
 	if (INVALID_SOCKET != _socket)
 		closesocket(_socket);
 
 	// wait for threads to terminate
 
-	if (_pReadThread)
-		_pReadThread->join();
+	//if (_pReadThread)
+		//_pReadThread->join();
 
 	if (_pTransmitThread)
 		_pTransmitThread->join();
@@ -213,97 +223,102 @@ void NetworkServerConnection::ReadThread()
 		//if ((nBytes = recv(_socket, buff, BuffLen, 0)) > 0)
 		if ((nBytes = recv(_socket, _pRxBuff + _nRxBytes, buffAvail, 0)) > 0)
 		{
-			if (nBytes > 0)
+			_nRxBytes += nBytes;
+
+			if (nBytes == buffAvail)
 			{
-				_nRxBytes += nBytes;
+				// we may overrun
 
-				if (nBytes == buffAvail)
+				char* pOldBuff = _pRxBuff;
+
+				_rxBuffSize <<= 1;
+
+				TRACE("Rx buffer increased: %d\n", _rxBuffSize);
+
+				_pRxBuff = new char[_rxBuffSize];
+				memcpy(_pRxBuff, pOldBuff, _nRxBytes);
+
+				delete[] pOldBuff;
+			}
+
+			//memcpy(_pRxBuff + _nRxBytes, buff, nBytes);
+			//_nRxBytes += nBytes;
+
+			// check for \r\n\r\n signifying end of header
+			/*
+			for (int i = 0; i <= nBytes - 4 && headerLen < 0; i++)
+			{
+				if (buff[i] == '\r' && buff[i+1] == '\n' && buff[i+2] == '\r' && buff[i+3] == '\n')
+					headerLen = i;
+			}
+			*/
+			for (int i = 0; i <= _nRxBytes - 4 && headerLen < 0; i++)
+			{
+				if (_pRxBuff[i] == '\r' && _pRxBuff[i + 1] == '\n' && _pRxBuff[i + 2] == '\r' && _pRxBuff[i + 3] == '\n')
+					headerLen = i;
+			}
+
+
+			// parse the header and check if we're expecting a body
+
+			if (headerLen > 0)
+			{
+				char* pHeader = new char[headerLen + 1];
+				memcpy(pHeader, _pRxBuff, headerLen);
+				pHeader[headerLen] = '\0';
+
+				_networkRequest.ParseHeader(pHeader);
+
+				delete[] pHeader;
+
+				if (_networkRequest.contentLength > 0)
 				{
-					// we may overrun
-
-					char* pOldBuff = _pRxBuff;
-
-					_rxBuffSize <<= 1;
-
-					TRACE("Rx buffer increased: %d\n", _rxBuffSize);
-
-					_pRxBuff = new char[_rxBuffSize];
-					memcpy(_pRxBuff, pOldBuff, _nRxBytes);
-
-					delete [] pOldBuff;
-				}
-
-				//memcpy(_pRxBuff + _nRxBytes, buff, nBytes);
-				//_nRxBytes += nBytes;
-
-				// check for \r\n\r\n signifying end of header
-				/*
-				for (int i = 0; i <= nBytes - 4 && headerLen < 0; i++)
-				{
-					if (buff[i] == '\r' && buff[i+1] == '\n' && buff[i+2] == '\r' && buff[i+3] == '\n')
-						headerLen = i;
-				}
-				*/
-				for (int i = 0; i <= _nRxBytes - 4 && headerLen < 0; i++)
-				{
-					if (_pRxBuff[i] == '\r' && _pRxBuff[i + 1] == '\n' && _pRxBuff[i + 2] == '\r' && _pRxBuff[i + 3] == '\n')
-						headerLen = i;
-				}
-
-
-				// parse the header and check if we're expecting a body
-
-				if (headerLen > 0)
-				{
-					char* pHeader = new char[headerLen + 1];
-					memcpy(pHeader, _pRxBuff, headerLen);
-					pHeader[headerLen] = '\0';
-
-					_networkRequest.ParseHeader(pHeader);
-
-					delete [] pHeader;
-
-					if (_networkRequest.contentLength > 0)
+					if (_nRxBytes - (headerLen + 4) >= _networkRequest.contentLength)
 					{
-						if (_nRxBytes - (headerLen + 4) >= _networkRequest.contentLength)
-						{
-							delete[] _networkRequest.pContent;
-							_networkRequest.pContent = nullptr;
+						delete[] _networkRequest.pContent;
+						_networkRequest.pContent = nullptr;
 
-							// add an extra byte to the content buffer so we can null
-							// terminate it to make it easier if it's a string
+						// add an extra byte to the content buffer so we can null
+						// terminate it to make it easier if it's a string
 
-							_networkRequest.pContent = new char[_networkRequest.contentLength + 1];
-							memcpy(_networkRequest.pContent, 
-								_pRxBuff + headerLen + 4,
-								_networkRequest.contentLength);
+						_networkRequest.pContent = new char[_networkRequest.contentLength + 1];
+						memcpy(_networkRequest.pContent,
+							_pRxBuff + headerLen + 4,
+							_networkRequest.contentLength);
 
-							_networkRequest.pContent[_networkRequest.contentLength] = '\0';
+						_networkRequest.pContent[_networkRequest.contentLength] = '\0';
 
-							requestComplete = true;
-						}			
-					}
-					else
-					{
 						requestComplete = true;
 					}
 				}
-
-				if (requestComplete)
+				else
 				{
-					_pServer->OnRequest(*this, _networkRequest);
-					_nRxBytes = 0;
+					requestComplete = true;
 				}
+			}
+
+			if (requestComplete)
+			{
+				_pServer->OnRequest(*this, _networkRequest);
+				_nRxBytes = 0;
 			}
 			
 		}
-		else // socket has closed
+		else // socket has probably closed
 		{
-			_closeConnection = true;
-			_socket = INVALID_SOCKET;
+			int err = WSAGetLastError();
+
+			//_closeConnection = true;
+			//_socket = INVALID_SOCKET;
+
+			_pReadThread->detach();
+
+			_pServer->RemoveConnection(_id);
+
+			break; // member vars will no longer be valid
 
 			// wake the transmit thread so it can end
-			_transmitCv.notify_all();
+			//_transmitCv.notify_all();
 
 			//### call OnDisconnect()/OnSocketClosed() ???
 		}
@@ -356,7 +371,7 @@ tx:
 			char* ptr = pTxBuff->pData;
 			int nBytes = send(_socket, ptr, pTxBuff->len, 0);
 
-			if (SOCKET_ERROR == nBytes)
+			if (SOCKET_ERROR == nBytes || 0 == nBytes)
 			{
 				TRACE("Error: unable to transmit data\n");
 			}

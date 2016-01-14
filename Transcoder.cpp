@@ -4,14 +4,19 @@
 
 #include <ALACBitUtilities.h>
 
-FILE* fPcmFile;
-FILE* fMp3File;
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+
+//FILE* fPcmFile;
+//FILE* fMp3File;
 
 CTranscoder::CTranscoder()
 	: _pAlacDecoder(nullptr), _pAlacBitBuffer(nullptr)
 {
-	fPcmFile = fopen("airplay.pcm", "wb");
-	fMp3File = fopen("airplay.mp3", "wb");
+	//fPcmFile = fopen("airplay.pcm", "wb");
+	//fMp3File = fopen("airplay.mp3", "wb");
 }
 
 CTranscoder::~CTranscoder()
@@ -21,8 +26,8 @@ CTranscoder::~CTranscoder()
 	delete[] _pAlacInputBuffer;
 	delete[] _pAlacOutputBuffer;
 
-	fclose(fPcmFile);
-	fclose(fMp3File);
+	//fclose(fPcmFile);
+	//fclose(fMp3File);
 
 	lame_close(_pLameGlobalFlags);
 	delete[] _pMp3Buffer;
@@ -41,12 +46,12 @@ bool CTranscoder::Init(ALACSpecificConfig* alacConfig, int streamId)
 	_pAlacDecoder = new ALACDecoder();
 	_pAlacDecoder->Init(alacConfig, sizeof ALACSpecificConfig);
 
-	int nInputPacketBytes = alacConfig->numChannels * (alacConfig->bitDepth >> 3) * alacConfig->frameLength + kALACMaxEscapeHeaderBytes; // nChannelsPerFrame * output.bitsPerChannel/8 * input.framesPerPacket[frameLength?] + kALACMaxEscapeHeaderBytes
-	_pAlacInputBuffer = new uint8_t[nInputPacketBytes];
-	_pAlacOutputBuffer = new uint8_t[nInputPacketBytes - kALACMaxEscapeHeaderBytes];
+	_nInputPacketBytes = alacConfig->numChannels * (alacConfig->bitDepth >> 3) * alacConfig->frameLength + kALACMaxEscapeHeaderBytes; // nChannelsPerFrame * output.bitsPerChannel/8 * input.framesPerPacket[frameLength?] + kALACMaxEscapeHeaderBytes
+	_pAlacInputBuffer = new uint8_t[_nInputPacketBytes];
+	_pAlacOutputBuffer = new uint8_t[_nInputPacketBytes - kALACMaxEscapeHeaderBytes];
 	
 	_pAlacBitBuffer = new BitBuffer();
-	BitBufferInit(_pAlacBitBuffer, _pAlacInputBuffer, nInputPacketBytes);
+	BitBufferInit(_pAlacBitBuffer, _pAlacInputBuffer, _nInputPacketBytes);
 
 	_alacConfig = *alacConfig;
 
@@ -70,7 +75,7 @@ bool CTranscoder::Init(ALACSpecificConfig* alacConfig, int streamId)
 		return false;
 	}
 
-	_nMp3Buffer = 1.25 * alacConfig->frameLength + 7200; // worst case apparently
+	_nMp3Buffer = (int)(1.25 * alacConfig->frameLength + 7200); // worst case apparently
 	_pMp3Buffer = new uint8_t[_nMp3Buffer];
 
 	_streamId = streamId;
@@ -81,6 +86,8 @@ bool CTranscoder::Init(ALACSpecificConfig* alacConfig, int streamId)
 bool CTranscoder::Write(unsigned char* pAlac, int len)
 {
 	uint32_t nOutFrames = 0;
+
+	ASSERT(len <= _nInputPacketBytes);
 	
 	memcpy(_pAlacInputBuffer, pAlac, len);
 
@@ -89,12 +96,16 @@ bool CTranscoder::Write(unsigned char* pAlac, int len)
 
 	int nOutBytes = nOutFrames * _alacConfig.numChannels * _alacConfig.bitDepth >> 3;
 
+	ASSERT(nOutBytes <= (_nInputPacketBytes - kALACMaxEscapeHeaderBytes));
+
 	if (status < 0)
 		TRACE("Error: ALAC Decode returned %d\n", status);
-	else
-		;// fwrite(_pAlacOutputBuffer, 1, nOutBytes, fPcmFile);
+	//else
+	//	fwrite(_pAlacOutputBuffer, 1, nOutBytes, fPcmFile);
 	
 	int nMp3Bytes = lame_encode_buffer_interleaved(_pLameGlobalFlags, (short*)_pAlacOutputBuffer, nOutBytes >> 2, _pMp3Buffer, _nMp3Buffer);
+
+	ASSERT(nMp3Bytes <= _nMp3Buffer);
 
 	if (nMp3Bytes < 0)
 	{
@@ -102,7 +113,7 @@ bool CTranscoder::Write(unsigned char* pAlac, int len)
 	}
 	else
 	{
-		fwrite(_pMp3Buffer, 1, nMp3Bytes, fMp3File);
+		//fwrite(_pMp3Buffer, 1, nMp3Bytes, fMp3File);
 		StreamingServer::GetStreamingServer()->AddStreamData(_streamId, _pMp3Buffer, nMp3Bytes);
 	}
 

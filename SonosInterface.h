@@ -1,7 +1,17 @@
 #pragma once
 
+#include <UPnP.h>
+
 #include <string>
 #include <list>
+#include <mutex>
+
+class SonosInterfaceClient
+{
+public:
+	virtual void OnNewDevice(const SonosDevice& dev) {}
+	virtual void OnDeviceRemoved(const SonosDevice& dev) {}
+};
 
 class SonosDevice
 {
@@ -41,6 +51,8 @@ public:
 	SonosInterface();
 	virtual ~SonosInterface();
 
+	void RegisterClient(SonosInterfaceClient* pClient) { _pClient = pClient; }
+
 	bool Init();
 	bool FindSpeakers();
 	bool HttpRequest(const char* ip, int port, const char* path, std::string& document);
@@ -61,7 +73,6 @@ public:
 			if (!udn.empty())
 			{	
 				SetAvTransportUri(udn.c_str(), "x-rincon-mp3radio://www.bbc.co.uk/radio/listen/live/r3.asx", "rdok testing");
-				/*x-rincon-mp3radio://www.bbc.co.uk/radio/listen/live/r3.asx*/
 				Play(udn.c_str());
 			}
 		}
@@ -83,7 +94,26 @@ protected:
 	std::string CreateSoapRequest(const char* endPoint, const char* host, int port, const char* body, const char* action);
 	bool NetworkRequest(const char* ip, int port, const char* path, std::string& document, const char* req);
 
+	bool StartAsyncSearch();
+	void CancelAsyncSearch();
+
+	void SearchThread();
+
+	SonosInterfaceClient* _pClient;
+
+	std::thread* _pSearchThread;
+
 	std::list<SonosDevice> _deviceList;
 	std::list<SonosGroup> _groupList;
+	std::mutex _listMutex;
+
+	IUPnPDeviceFinderCallback* _pUPnPDeviceFinderCallback;
+	IUPnPDeviceFinder* _pUPnPDeviceFinder;
+
+	LONG _lFindData;
+
+	bool _searching;
+	bool _searchCompleted;
+	bool _shutdown;
 };
 

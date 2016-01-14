@@ -2,6 +2,12 @@
 #include "StreamingServer.h"
 
 #include <sstream>
+#include <mutex>
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // StreamingServer implementation - this is a Singleton
@@ -17,6 +23,11 @@ StreamingServer* StreamingServer::GetStreamingServer()
 	return InstancePtr;
 }
 
+void StreamingServer::Delete()
+{
+	delete InstancePtr;
+}
+
 StreamingServer::StreamingServer()
 {
 }
@@ -24,6 +35,8 @@ StreamingServer::StreamingServer()
 StreamingServer::~StreamingServer()
 {
 	// remove all the streams
+
+	std::lock_guard<std::mutex> lock(_streamMapMutex);
 
 	for (auto it = _streamMap.begin(); it != _streamMap.end(); ++it)
 		delete it->second;
@@ -35,8 +48,13 @@ void StreamingServer::CreateStream(int streamId)
 {
 	// only create the stream if it doesn't already exist
 
+	std::lock_guard<std::mutex> lock(_streamMapMutex);
+
 	if (_streamMap.find(streamId) == _streamMap.end())
+	{
 		_streamMap[streamId] = new StreamingServerStream(streamId, this);
+		TRACE("Created stream %d\n", streamId);
+	}
 }
 
 void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequest& request)
@@ -65,7 +83,7 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 			{
 				((StreamingServerConnection*)&connection)->_streamIdRequested = streamId;
 
-				NetworkResponse resp("HTTP/1.0", 200, "OK");
+				NetworkResponse resp("HTTP/1.1", 200, "OK");
 				resp.AddHeaderField("Content-Type", "audio/x-mpegurl");
 
 				std::ostringstream body;
@@ -98,12 +116,13 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 
 				((StreamingServerConnection*)&connection)->_streamIdRequested = streamId;
 
-				NetworkResponse resp("HTTP/1.0", 200, "OK");
+				NetworkResponse resp("HTTP/1.1", 200, "OK");
 				resp.AddHeaderField("Content-Type", "audio/mpeg");
-				resp.AddHeaderField("Connection", "close");
+				//resp.AddHeaderField("Connection", "close");
 
 				if (request.headerFieldMap["ICY-METADATA"] == "1")
-					resp.AddHeaderField("icy-metaint", "8192");
+					//resp.AddHeaderField("icy-metaint", "8192");
+					resp.AddHeaderField("icy-metaint", "0");
 
 				connection.SendResponse(resp);
 
@@ -117,7 +136,7 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 void StreamingServer::AddStreamData(int streamId, unsigned char* pData, int len)
 {
 
-	//### add mutex
+	std::lock_guard<std::mutex> lock(_streamMapMutex);
 
 	// keep the latency short, don't add stream data if the stream doesn't exist
 	if ((_streamMap.find(streamId)) == _streamMap.end())
@@ -130,7 +149,7 @@ void StreamingServer::AddStreamData(int streamId, unsigned char* pData, int len)
 // called from a StreamingServerStream instance
 void StreamingServer::TransmitStreamData(int streamId, unsigned char* pData, int len)
 {
-	//### add mutex
+	std::lock_guard<std::mutex> lock (_connectionListMutex);
 
 	// send data out on each connection listening to this stream
 	for (std::list<NetworkServerConnection*>::iterator it = _connectionList.begin(); it != _connectionList.end(); ++it)
@@ -165,7 +184,7 @@ StreamingServerConnection::~StreamingServerConnection()
 
 StreamingServerStream::StreamingServerStream(int id, StreamingServer* pServer)
 	: _id(id), _buffSize(65536), _pBuff(nullptr), _nBytesInBuff(0),
-		_pServer(nullptr), _metaCount(0)
+		_pServer(pServer), _metaCount(0)
 {
 	_pBuff = new unsigned char[_buffSize];
 }
@@ -180,11 +199,13 @@ void StreamingServerStream::AddData(unsigned char* pData, int len)
 {
 	// increase the buffer size if it's too small
 
-	if ((len + _nBytesInBuff) > _buffSize)
+	while ((len + _nBytesInBuff) > _buffSize)
 	{
 		unsigned char* pOldBuff = _pBuff;
 
 		_buffSize <<= 1; // double the size
+
+		TRACE("Increasing stream buffer size: %d\n", _buffSize);
 
 		_pBuff = new unsigned char[_buffSize];
 
@@ -205,7 +226,7 @@ void StreamingServerStream::AddData(unsigned char* pData, int len)
 		int nBytesToSend = 0;
 		bool sendMeta = false;
 
-		if (_buffSize + _metaCount < MetaInterval)
+		if (_nBytesInBuff + _metaCount < MetaInterval)
 		{
 			nBytesToSend = _nBytesInBuff; // send all
 		}
@@ -221,10 +242,13 @@ void StreamingServerStream::AddData(unsigned char* pData, int len)
 		if (sendMeta)
 		{
 			unsigned char zero = 0;
-			_pServer->TransmitStreamData(_id, &zero, 1);
+			//_pServer->TransmitStreamData(_id, &zero, 1);
 		}
 
-		memmove(_pBuff, _pBuff + nBytesToSend, nBytesToSend);
+		// only shift the data if we've still got bytes to send
+		if (nBytesToSend < _nBytesInBuff)
+			memmove(_pBuff, _pBuff + nBytesToSend, _nBytesInBuff - nBytesToSend);
+
 		_nBytesInBuff -= nBytesToSend;
 		_metaCount = (_metaCount + nBytesToSend) % MetaInterval;
 	}
