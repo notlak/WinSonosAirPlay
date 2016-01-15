@@ -13,7 +13,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 StreamingServer* StreamingServer::InstancePtr = nullptr;
-int StreamingServer::NextStreamId = 0;
+int StreamingServer::NextStreamId = 1; // start at 1
 
 StreamingServer* StreamingServer::GetStreamingServer()
 {
