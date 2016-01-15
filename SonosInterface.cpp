@@ -18,6 +18,7 @@
 #endif
 
 const char* AvTransportEndPoint = "/MediaRenderer/AVTransport/Control";
+const char* RenderingEndPoint = "/MediaRenderer/RenderingControl/Control";
 
 ///////////////////////////////////////////////////////////////////////////////
 // CUPnPDeviceFinderCallback implements IUPnPDeviceFinderCallback
@@ -949,6 +950,26 @@ bool SonosInterface::Pause(const char* pUdn)
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
 }
 
+bool SonosInterface::SetVolume(const char* pUdn, int volume)
+{
+	SonosDevice dev;
+
+	if (!GetDeviceByUdn(pUdn, dev))
+		return false;
+
+	std::ostringstream body;
+	body << R"(<u:SetVolume xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1"><InstanceID>0</InstanceID><Channel>Master</Channel><DesiredVolume>)" <<
+		volume << "</DesiredVolume></u:SetVolume>";
+
+	std::string req = CreateSoapRequest(RenderingEndPoint,
+		dev._address.c_str(), dev._port,
+		body.str().c_str(),
+		"urn:schemas-upnp-org:service:RenderingControl:1#SetVolume");
+
+	std::string resp;
+
+	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
+}
 
 bool SonosInterface::SetAvTransportUri(const char* pUdn, const char* pUri, const char* pTitle)
 {
@@ -1010,7 +1031,7 @@ std::string SonosInterface::FormatMetaData(const char* pTitle)
 
 	meta.str("");
 
-	for (int i = 0; i < m.length(); i++)
+	for (int i = 0; i < (int)m.length(); i++)
 	{
 		
 		if (MustEscape(m[i], escaped))

@@ -30,5 +30,6 @@ protected:
 	uint8_t* _pMp3Buffer;
 	int _nMp3Buffer;
 	int _streamId;
+	bool _shutdown;
 };
 

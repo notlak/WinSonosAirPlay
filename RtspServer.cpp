@@ -374,6 +374,30 @@ void RtspServer::HandleSetParameter(NetworkServerConnection& connection, Network
 	resp.AddHeaderField("Server", "AirTunes/105.1");
 	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
 
+	// look for volume setting
+	if (request.headerFieldMap.find("CONTENT-TYPE") != request.headerFieldMap.end() &&
+		request.headerFieldMap["CONTENT-TYPE"] == "text/parameters")
+	{
+		std::string content(request.pContent);
+		int pos = content.find("volume:");
+
+		if (pos != std::string::npos)
+		{
+			pos += 8;
+			float vol = (float)atof(content.substr(pos).c_str());
+
+			TRACE("Got AirPlay volume %f\n", vol);
+
+			vol = vol > -30.0f ? vol : -30.0f;
+
+			int sonosVol = 100 - (int)(-1.0f * (vol / 30.0f) * 100.0f);
+
+			TRACE("Setting Sonos volume to: %d\n", sonosVol);
+
+			SonosInterface::GetInstance()->SetVolume(_sonosUdn.c_str(), sonosVol);
+		}
+	}
+
 	connection.SendResponse(resp);
 }
 

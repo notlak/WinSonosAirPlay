@@ -13,7 +13,10 @@
 //FILE* fMp3File;
 
 CTranscoder::CTranscoder()
-	: _pAlacDecoder(nullptr), _pAlacBitBuffer(nullptr)
+	: _pAlacDecoder(nullptr), _pAlacBitBuffer(nullptr), 
+	_pAlacInputBuffer(nullptr), _pAlacOutputBuffer(nullptr),
+	_pLameGlobalFlags(nullptr), _pMp3Buffer(nullptr),
+	_shutdown(false)
 {
 	//fPcmFile = fopen("airplay.pcm", "wb");
 	//fMp3File = fopen("airplay.mp3", "wb");
@@ -21,6 +24,8 @@ CTranscoder::CTranscoder()
 
 CTranscoder::~CTranscoder()
 {
+	_shutdown = true;
+
 	delete _pAlacDecoder;
 	delete _pAlacBitBuffer;
 	delete[] _pAlacInputBuffer;
@@ -29,7 +34,9 @@ CTranscoder::~CTranscoder()
 	//fclose(fPcmFile);
 	//fclose(fMp3File);
 
-	lame_close(_pLameGlobalFlags);
+	if (_pLameGlobalFlags)
+		lame_close(_pLameGlobalFlags);
+
 	delete[] _pMp3Buffer;
 
 }
@@ -85,6 +92,9 @@ bool CTranscoder::Init(ALACSpecificConfig* alacConfig, int streamId)
 
 bool CTranscoder::Write(unsigned char* pAlac, int len)
 {
+	if (_shutdown)
+		return false;
+
 	uint32_t nOutFrames = 0;
 
 	ASSERT(len <= _nInputPacketBytes);

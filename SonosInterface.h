@@ -67,6 +67,7 @@ public:
 	bool Play(const char* pUdn);
 	bool Pause(const char* pUdn);
 	bool SetAvTransportUri(const char* pUdn, const char* pUri, const char* pTitle);
+	bool SetVolume(const char* pUdn, int volume);
 
 	bool Test()
 	{
