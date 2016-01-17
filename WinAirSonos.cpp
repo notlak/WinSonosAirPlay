@@ -59,6 +59,8 @@ CWinAirSonosApp::~CWinAirSonosApp()
 	_sdRefMap.clear();
 
 	SonosInterface::Delete();
+
+	WSACleanup();
 }
 
 
@@ -161,6 +163,7 @@ void CWinAirSonosApp::OnNewDevice(const SonosDevice& dev)
 		if (pAirPlayServer->StartListening(nullptr, port))
 		{
 			isListening = true;
+			TRACE("Starting RtspServer on port: %d\n", port);
 		}
 		else
 		{
@@ -172,11 +175,18 @@ void CWinAirSonosApp::OnNewDevice(const SonosDevice& dev)
 	}
 
 	if (isListening)
+	{
 		_airplayServerMap[dev._name] = pAirPlayServer;
 
-	// advertise it via mDNS
+		// advertise it via mDNS
 
-	AdvertiseServer(dev._name, port);
+		AdvertiseServer(dev._name, port);
+
+	}
+	else
+	{
+		TRACE("Failed to start RtspServer for %s\n", dev._name.c_str());
+	}
 }
 
 void CWinAirSonosApp::OnDeviceRemoved(const SonosDevice& dev)
@@ -297,8 +307,29 @@ BOOL CWinAirSonosApp::InitInstance()
 	pSonosInterface->RegisterClient(this);
 	pSonosInterface->Init();
 
+	// need to initialise WSA stuff in this thread
+
+	WORD wVersionRequested;
+	WSADATA wsaData;
+	wVersionRequested = MAKEWORD(2, 2);
+	WSAStartup(wVersionRequested, &wsaData);
+
 	StreamingServer* pStreamingServer = StreamingServer::GetStreamingServer();
-	pStreamingServer->StartListening(nullptr, MP3_PORT);
+	bool isListening = false;
+	int port = MP3_PORT;
+
+	for (int i = 0; i < 5 && !isListening; i++)
+	{
+		isListening = pStreamingServer->StartListening(nullptr, port);
+
+		if (!isListening)
+			port++;
+	}
+
+	if (isListening)
+		TRACE("Started StreamingServer on port: %d\n", port);
+	else
+		TRACE("Error: unable to start stream server\n");
 
 	//RtspServer* pAirPlayServer = new RtspServer();
 	//pAirPlayServer->StartListening(nullptr, RTSP_PORT);

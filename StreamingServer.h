@@ -46,6 +46,7 @@ public:
 	static StreamingServer* GetStreamingServer();
 	static void Delete();
 	static int GetStreamId();
+	static int GetPort() { return GetStreamingServer()->_port; }
 
 	void CreateStream(int streamId);
 

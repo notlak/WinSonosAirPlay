@@ -971,6 +971,17 @@ bool SonosInterface::SetVolume(const char* pUdn, int volume)
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
 }
 
+/*POST /MediaRenderer/AVTransport/Control HTTP/1.1
+CONNECTION: close
+ACCEPT-ENCODING: gzip
+HOST: 192.168.1.67:1400
+USER-AGENT: Linux UPnP/1.0 Sonos/31.8-24090 (WDCR:Microsoft Windows NT 10.0.10586)
+CONTENT-LENGTH: 1021
+CONTENT-TYPE: text/xml; charset="utf-8"
+SOAPACTION: "urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI"
+
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><CurrentURI>x-rincon-mp3radio://streams.greenhost.nl:8080/hardbop.m3u</CurrentURI><CurrentURIMetaData>&lt;DIDL-Lite xmlns:dc=&quot;http://purl.org/dc/elements/1.1/&quot; xmlns:upnp=&quot;urn:schemas-upnp-org:metadata-1-0/upnp/&quot; xmlns:r=&quot;urn:schemas-rinconnetworks-com:metadata-1-0/&quot; xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/&quot;&gt;&lt;item id=&quot;R:0/0/13&quot; parentID=&quot;R:0/0&quot; restricted=&quot;true&quot;&gt;&lt;dc:title&gt;Test&lt;/dc:title&gt;&lt;upnp:class&gt;object.item.audioItem.audioBroadcast&lt;/upnp:class&gt;&lt;desc id=&quot;cdudn&quot; nameSpace=&quot;urn:schemas-rinconnetworks-com:metadata-1-0/&quot;&gt;SA_RINCON65031_&lt;/desc&gt;&lt;/item&gt;&lt;/DIDL-Lite&gt;</CurrentURIMetaData></u:SetAVTransportURI></s:Body></s:Envelope>*/
+
 bool SonosInterface::SetAvTransportUri(const char* pUdn, const char* pUri, const char* pTitle)
 {
 	SonosDevice dev;
@@ -978,9 +989,11 @@ bool SonosInterface::SetAvTransportUri(const char* pUdn, const char* pUri, const
 	if (!GetDeviceByUdn(pUdn, dev))
 		return false;
 
+
+
 	std::ostringstream body;
 	body << R"(<u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><CurrentURI>)"
-		<< pUri << "</CurrentURI><CurrentURIMetaData>" <<  FormatMetaData(pTitle) << "</CurrentURIMetaData></u:SetAVTransportURI>";
+		<< pUri << "</CurrentURI><CurrentURIMetaData>" <<  "" << /*FormatMetaData(pTitle) <<*/ "</CurrentURIMetaData></u:SetAVTransportURI>";
 
 	std::string req = CreateSoapRequest(AvTransportEndPoint,
 		dev._address.c_str(), dev._port, body.str().c_str(),
@@ -1054,7 +1067,7 @@ std::string SonosInterface::CreateSoapRequest(const char* endPoint, const char* 
 		"<s:Body>" << body << "</s:Body>"
 		"</s:Envelope>";
 
-	req << "POST " << endPoint << " HTTP/1.1\r\n"
+	req << "POST " << endPoint << " HTTP/1.0\r\n"
 		"CONNECTION: close\r\n"
 		"HOST: " << host << ":" << port << "\r\n"
 		"CONTENT-LENGTH: " << envelope.str().length() << "\r\n"

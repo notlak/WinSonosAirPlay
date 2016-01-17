@@ -176,7 +176,11 @@ public:
 		_listeningSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
 		if (INVALID_SOCKET == _listeningSocket)
+		{
+			int err = WSAGetLastError();
+			TRACE("Error: unable to start listening, error %d\n", err);
 			return false;
+		}
 
 		addr.sin_family = AF_INET;
 		addr.sin_port = htons((unsigned short)port);

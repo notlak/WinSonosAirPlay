@@ -88,8 +88,9 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 			{
 				((StreamingServerConnection*)&connection)->_streamIdRequested = streamId;
 
-				NetworkResponse resp("HTTP/1.1", 200, "OK");
+				NetworkResponse resp("HTTP/1.0", 200, "OK");
 				resp.AddHeaderField("Content-Type", "audio/x-mpegurl");
+				resp.AddHeaderField("Connection", "close");
 
 				std::ostringstream body;
 
@@ -121,9 +122,9 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 
 				((StreamingServerConnection*)&connection)->_streamIdRequested = streamId;
 
-				NetworkResponse resp("HTTP/1.1", 200, "OK");
+				NetworkResponse resp("HTTP/1.0", 200, "OK");
 				resp.AddHeaderField("Content-Type", "audio/mpeg");
-				//resp.AddHeaderField("Connection", "close");
+				resp.AddHeaderField("Connection", "close");
 
 				if (request.headerFieldMap["ICY-METADATA"] == "1")
 					//resp.AddHeaderField("icy-metaint", "8192");
