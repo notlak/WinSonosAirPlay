@@ -8,6 +8,8 @@
 #define new DEBUG_NEW
 #endif
 
+#define ONE_STREAM
+
 ///////////////////////////////////////////////////////////////////////////////
 // StreamingServer implementation - this is a Singleton
 ///////////////////////////////////////////////////////////////////////////////
@@ -30,7 +32,11 @@ void StreamingServer::Delete()
 
 int StreamingServer::GetStreamId()
 {
+#ifdef ONE_STREAM
+	return 1;
+#else
 	return NextStreamId++;
+#endif
 }
 
 StreamingServer::StreamingServer()
@@ -40,17 +46,19 @@ StreamingServer::StreamingServer()
 StreamingServer::~StreamingServer()
 {
 	// remove all the streams
-
+#if 0
 	std::lock_guard<std::mutex> lock(_streamMapMutex);
 
 	for (auto it = _streamMap.begin(); it != _streamMap.end(); ++it)
 		delete it->second;
 
 	_streamMap.clear();
+#endif
 }
 
 void StreamingServer::CreateStream(int streamId)
 {
+#if 0
 	// only create the stream if it doesn't already exist
 
 	std::lock_guard<std::mutex> lock(_streamMapMutex);
@@ -60,6 +68,7 @@ void StreamingServer::CreateStream(int streamId)
 		_streamMap[streamId] = new StreamingServerStream(streamId, this);
 		TRACE("Created stream %d\n", streamId);
 	}
+#endif
 }
 
 void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequest& request)
@@ -118,7 +127,7 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 			{
 				// create a corresponding stream object in the server if one doesn't exist
 
-				CreateStream(streamId);
+				//CreateStream(streamId);
 
 				((StreamingServerConnection*)&connection)->_streamIdRequested = streamId;
 
@@ -127,8 +136,8 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 				resp.AddHeaderField("Connection", "close");
 
 				if (request.headerFieldMap["ICY-METADATA"] == "1")
-					//resp.AddHeaderField("icy-metaint", "8192");
-					resp.AddHeaderField("icy-metaint", "0");
+					resp.AddHeaderField("icy-metaint", "8192");
+					//resp.AddHeaderField("icy-metaint", "0");
 
 				connection.SendResponse(resp);
 
@@ -141,7 +150,7 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 // called by audio provider
 void StreamingServer::AddStreamData(int streamId, unsigned char* pData, int len)
 {
-
+	/* Don't use the Stream object, instead handle in the StreamingServerConnection
 	std::lock_guard<std::mutex> lock(_streamMapMutex);
 
 	// keep the latency short, don't add stream data if the stream doesn't exist
@@ -149,13 +158,24 @@ void StreamingServer::AddStreamData(int streamId, unsigned char* pData, int len)
 		return;
 
 	_streamMap[streamId]->AddData(pData, len);
+	*/
 
+	std::lock_guard<std::mutex> lock(_connectionListMutex);
+
+	for (auto it = _connectionList.begin(); it != _connectionList.end(); ++it)
+	{
+		StreamingServerConnection* pConn = dynamic_cast<StreamingServerConnection*>(*it);
+		if (pConn->_streamIdRequested == streamId)
+		{
+			pConn->TransmitStreamData(pData, len);
+		}
+	}
 }
 
 // called from a StreamingServerStream instance
 void StreamingServer::TransmitStreamData(int streamId, unsigned char* pData, int len)
 {
-	std::lock_guard<std::mutex> lock (_connectionListMutex);
+	std::lock_guard<std::mutex> lock(_connectionListMutex);
 
 	// send data out on each connection listening to this stream
 	for (std::list<NetworkServerConnection*>::iterator it = _connectionList.begin(); it != _connectionList.end(); ++it)
@@ -173,7 +193,7 @@ void StreamingServer::TransmitStreamData(int streamId, unsigned char* pData, int
 
 StreamingServerConnection::StreamingServerConnection(NetworkServerInterface* pServerInterface, SOCKET socket, SOCKADDR_IN& remoteAddr)
 	: NetworkServerConnection(pServerInterface, socket, remoteAddr),
-	_streamIdRequested(-1)
+	_streamIdRequested(-1), _metaCount(0)
 {
 
 }
@@ -183,11 +203,36 @@ StreamingServerConnection::~StreamingServerConnection()
 
 }
 
+void StreamingServerConnection::TransmitStreamData(unsigned char* pData, int len)
+{
+	// just in case we ever get massive packets, or have a small metadata interval
+	while (len + _metaCount > MetaDataInterval)
+	{
+		int preMetaBytes = MetaDataInterval - _metaCount;
+
+		Transmit((char*)pData, preMetaBytes);
+
+		// Transmit metadata - none for now
+		char c = 0;
+		Transmit(&c, 1);
+
+		_metaCount = 0;
+		pData += preMetaBytes;
+		len -= preMetaBytes;
+	}
+
+	if (len > 0)
+	{
+		Transmit((char*)pData, len);
+		_metaCount += len;
+	}
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // StreamingServerStream implementation
 ///////////////////////////////////////////////////////////////////////////////
-
+#if 0 // unused now
 StreamingServerStream::StreamingServerStream(int id, StreamingServer* pServer)
 	: _id(id), _buffSize(65536), _pBuff(nullptr), _nBytesInBuff(0),
 		_pServer(pServer), _metaCount(0)
@@ -260,3 +305,4 @@ void StreamingServerStream::AddData(unsigned char* pData, int len)
 	}
 
 }
+#endif

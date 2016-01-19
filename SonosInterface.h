@@ -6,6 +6,8 @@
 #include <list>
 #include <mutex>
 
+//#define NO_SONOS
+
 class SonosDevice
 {
 public:

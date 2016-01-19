@@ -33,8 +33,12 @@ public:
 	StreamingServerConnection(NetworkServerInterface* pServerInterface, SOCKET socket, SOCKADDR_IN& remoteAddr);
 	~StreamingServerConnection();
 
-	int _streamIdRequested;
+	void TransmitStreamData(unsigned char* pData, int len);
+
 	StreamingServer* _pStreamingServer;
+	int _streamIdRequested;
+	static const int MetaDataInterval = 8192;
+	int _metaCount; // count of bytes before next metadata block
 };
 
 class StreamingServer : public NetworkServer<StreamingServerConnection>

@@ -204,7 +204,12 @@ bool SonosInterface::Init()
 {
 	// start the search thread
 
+#ifdef NO_SONOS
+	SonosDevice d(std::string("uuid:none"), std::string("TestSonos"), std::string("127.0.0.1"), 1400, std::string("TestSonos"), true);
+	_pClient->OnNewDevice(d);
+#else
 	_pSearchThread = new std::thread(&SonosInterface::SearchThread, this);
+#endif
 
 	return true;
 }
@@ -421,8 +426,6 @@ bool SonosInterface::FindSpeakers()
 	return hr == S_OK;
 }
 
-
-
 bool SonosInterface::HttpRequest(const char* ip, int port, const char* path, std::string& document)
 {
 	std::ostringstream req;
@@ -438,6 +441,10 @@ bool SonosInterface::HttpRequest(const char* ip, int port, const char* path, std
 
 bool SonosInterface::NetworkRequest(const char* ip, int port, const char* path, std::string& document, const char* req)
 {
+#ifdef NO_SONOS
+	return true;
+#endif
+
 	///// this should have been done by live555 stuff
 	// initialize Winsock library
 	//WSADATA wsadata;

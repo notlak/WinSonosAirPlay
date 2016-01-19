@@ -23,7 +23,6 @@
 #define new DEBUG_NEW
 #endif
 
-
 // CWinAirSonosApp
 
 BEGIN_MESSAGE_MAP(CWinAirSonosApp, CWinApp)
@@ -301,6 +300,11 @@ BOOL CWinAirSonosApp::InitInstance()
 	const int MP3_PORT = 50001;
 	const int RTSP_PORT = 50002;
 
+	WSADATA wsaData;
+	WORD wVersionRequested;
+	wVersionRequested = MAKEWORD(2, 2);
+	WSAStartup(wVersionRequested, &wsaData);
+
 	InitmDNS();
 
 	SonosInterface* pSonosInterface = SonosInterface::GetInstance();
@@ -308,11 +312,6 @@ BOOL CWinAirSonosApp::InitInstance()
 	pSonosInterface->Init();
 
 	// need to initialise WSA stuff in this thread
-
-	WORD wVersionRequested;
-	WSADATA wsaData;
-	wVersionRequested = MAKEWORD(2, 2);
-	WSAStartup(wVersionRequested, &wsaData);
 
 	StreamingServer* pStreamingServer = StreamingServer::GetStreamingServer();
 	bool isListening = false;
