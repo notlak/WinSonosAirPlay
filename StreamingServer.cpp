@@ -203,6 +203,28 @@ StreamingServerConnection::~StreamingServerConnection()
 
 }
 
+void StreamingServerConnection::TransmitMetaData(const char* title, const char* url)
+{
+	std::ostringstream meta;
+
+	meta << "StreamTitle='" << title << "';StreamURL='" << url << "';";
+
+	int nBytes = meta.str().length();
+
+	if (nBytes % 16)
+		nBytes += 16 - (nBytes % 16);
+
+	char* pBuff = new char[nBytes + 1];
+	memset(pBuff, 0, nBytes+1);
+	pBuff[0] = nBytes / 16;
+
+	memcpy(pBuff+1, meta.str().c_str(), nBytes);
+
+	Transmit(pBuff, nBytes+1);
+
+	delete[] pBuff;
+}
+
 void StreamingServerConnection::TransmitStreamData(unsigned char* pData, int len)
 {
 	// just in case we ever get massive packets, or have a small metadata interval
@@ -213,8 +235,10 @@ void StreamingServerConnection::TransmitStreamData(unsigned char* pData, int len
 		Transmit((char*)pData, preMetaBytes);
 
 		// Transmit metadata - none for now
-		char c = 0;
-		Transmit(&c, 1);
+		//char c = 0;
+		//Transmit(&c, 1);
+
+		TransmitMetaData("AirPlay - Test", "http://localhost/1/listen.m3u");
 
 		_metaCount = 0;
 		pData += preMetaBytes;

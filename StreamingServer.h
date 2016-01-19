@@ -34,6 +34,8 @@ public:
 	~StreamingServerConnection();
 
 	void TransmitStreamData(unsigned char* pData, int len);
+	void TransmitMetaData(const char* title, const char* url);
+
 
 	StreamingServer* _pStreamingServer;
 	int _streamIdRequested;
