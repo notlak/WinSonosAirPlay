@@ -996,11 +996,9 @@ bool SonosInterface::SetAvTransportUri(const char* pUdn, const char* pUri, const
 	if (!GetDeviceByUdn(pUdn, dev))
 		return false;
 
-
-
 	std::ostringstream body;
 	body << R"(<u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><CurrentURI>)"
-		<< pUri << "</CurrentURI><CurrentURIMetaData>" <<  "" << /*FormatMetaData(pTitle) <<*/ "</CurrentURIMetaData></u:SetAVTransportURI>";
+		<< pUri << "</CurrentURI><CurrentURIMetaData>" << FormatMetaData(pTitle) << "</CurrentURIMetaData></u:SetAVTransportURI>";
 
 	std::string req = CreateSoapRequest(AvTransportEndPoint,
 		dev._address.c_str(), dev._port, body.str().c_str(),

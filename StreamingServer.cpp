@@ -218,7 +218,7 @@ void StreamingServerConnection::TransmitMetaData(const char* title, const char* 
 	memset(pBuff, 0, nBytes+1);
 	pBuff[0] = nBytes / 16;
 
-	memcpy(pBuff+1, meta.str().c_str(), nBytes);
+	memcpy(pBuff+1, meta.str().c_str(), meta.str().length());
 
 	Transmit(pBuff, nBytes+1);
 
@@ -227,6 +227,9 @@ void StreamingServerConnection::TransmitMetaData(const char* title, const char* 
 
 void StreamingServerConnection::TransmitStreamData(unsigned char* pData, int len)
 {
+	if (len == 0)
+		return;
+
 	// just in case we ever get massive packets, or have a small metadata interval
 	while (len + _metaCount > MetaDataInterval)
 	{

@@ -330,6 +330,9 @@ void NetworkServerConnection::ReadThread()
 
 void NetworkServerConnection::Transmit(const char* pBuff, int len)
 {
+	if (len == 0)
+		return;
+
 	TransmitBuffer* pTxBuff = new TransmitBuffer(pBuff, len);
 
 	std::unique_lock<std::mutex> lock(_transmitMutex);
@@ -373,7 +376,8 @@ tx:
 
 			if (SOCKET_ERROR == nBytes || 0 == nBytes)
 			{
-				TRACE("Error: unable to transmit data\n");
+				int err = WSAGetLastError();
+				TRACE("Error: unable to transmit data %d\n", err);
 			}
 			else if (nBytes < pTxBuff->len)
 			{
