@@ -330,14 +330,12 @@ TRACE("Timing socket init\n");
 		// tell the sonos to start playing the stream
 
 		std::ostringstream uri;
-
-		//uri << "x-rincon-mp3radio://http://www.voicerss.org/controls/speech.ashx?hl=en-gb&src=hello%20hazel%20you%20idiot&c=mp3&rnd=0.8578293843928012";
 		
 		uri << "x-rincon-mp3radio://" << connection.GetIpAddress() << ":" << StreamingServer::GetPort() <<
 			"/" << pConn->_streamId << "/listen.m3u";
 			
 		//uri << "http://us1.internet-radio.com:8180/listen.pls&t=.m3u";
-
+		//uri << "x-rincon-mp3radio://http://www.voicerss.org/controls/speech.ashx?hl=en-gb&src=hello%20hazel%20you%20idiot&c=mp3&rnd=0.8578293843928012";
 
 		SonosInterface::GetInstance()->SetAvTransportUri(_sonosUdn.c_str(), uri.str().c_str(), "AirPlay");
 		SonosInterface::GetInstance()->Play(_sonosUdn.c_str());
@@ -374,33 +372,59 @@ void RtspServer::HandleGetParameter(NetworkServerConnection& connection, Network
 	connection.SendResponse(resp);
 }
 
+void RtspServer::ParseDmap(unsigned char* pData, int len)
+{
+	if (len < 4 || memcmp(pData, "mlit", 4))
+		return;
+
+	int itemSize = ntohl(*(int*)(pData + 4));
+
+
+}
+
 void RtspServer::HandleSetParameter(NetworkServerConnection& connection, NetworkRequest& request)
 {
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
 	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
 
-	// look for volume setting
-	if (request.headerFieldMap.find("CONTENT-TYPE") != request.headerFieldMap.end() &&
-		request.headerFieldMap["CONTENT-TYPE"] == "text/parameters")
+	if (request.headerFieldMap.find("CONTENT-TYPE") != request.headerFieldMap.end())
 	{
-		std::string content(request.pContent);
-		int pos = content.find("volume:");
-
-		if (pos != std::string::npos)
+		// look for volume setting
+		if (request.headerFieldMap["CONTENT-TYPE"] == "text/parameters")
 		{
-			pos += 8;
-			float vol = (float)atof(content.substr(pos).c_str());
+			std::string content(request.pContent);
+			int pos = content.find("volume:");
 
-			TRACE("Got AirPlay volume %f\n", vol);
+			if (pos != std::string::npos)
+			{
+				pos += 8;
+				float vol = (float)atof(content.substr(pos).c_str());
 
-			vol = vol > -30.0f ? vol : -30.0f;
+				TRACE("Got AirPlay volume %f\n", vol);
 
-			int sonosVol = 100 - (int)(-1.0f * (vol / 30.0f) * 100.0f);
+				vol = vol > -30.0f ? vol : -30.0f;
 
-			TRACE("Setting Sonos volume to: %d\n", sonosVol);
+				int sonosVol = 100 - (int)(-1.0f * (vol / 30.0f) * 100.0f);
 
-			SonosInterface::GetInstance()->SetVolume(_sonosUdn.c_str(), sonosVol);
+				TRACE("Setting Sonos volume to: %d\n", sonosVol);
+
+				SonosInterface::GetInstance()->SetVolume(_sonosUdn.c_str(), sonosVol);
+			}
+		}
+		// look for dmap metadata
+		else if (request.headerFieldMap["CONTENT-TYPE"] == "application/x-dmap-tagged")
+		{
+			/*SET_PARAMETER rtsp://192.168.1.87/8891522206846895449 RTSP/1.0
+RTP-Info: rtptime=1799381347
+Content-Length: 134
+Content-Type: application/x-dmap-tagged
+CSeq: 8
+DACP-ID: 2F56DAFF2A472297
+Active-Remote: 1957818474
+User-Agent: AirPlay/267.3
+
+mlit...~mper.....H.D.>..asal....Mind Elevationasar....Nightmares on Waxascp....asgn....minm....On Days (bonus track)asdk.....caps.....*/
 		}
 	}
 

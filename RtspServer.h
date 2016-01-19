@@ -58,6 +58,8 @@ protected:
 	void HandleGetParameter(NetworkServerConnection& connection, NetworkRequest& request);
 	void HandleSetParameter(NetworkServerConnection& connection, NetworkRequest& request);
 	void HandleTeardown(NetworkServerConnection& connection, NetworkRequest& request);
+	
+	void ParseDmap(unsigned char* pData, int len);
 
 	RSA* _airPortExpressKey;
 	std::string _sonosUdn;
