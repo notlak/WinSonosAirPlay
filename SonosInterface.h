@@ -6,7 +6,7 @@
 #include <list>
 #include <mutex>
 
-//#define NO_SONOS
+#define NO_SONOS
 
 class SonosDevice
 {
@@ -68,6 +68,7 @@ public:
 
 	bool Play(const char* pUdn);
 	bool Pause(const char* pUdn);
+	bool Stop(const char* pUdn);
 	bool SetAvTransportUri(const char* pUdn, const char* pUri, const char* pTitle);
 	bool SetVolume(const char* pUdn, int volume);
 

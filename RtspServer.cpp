@@ -6,11 +6,9 @@
 #include <sstream>
 #include <openssl\pem.h>
 
-
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
-
 
 static int Base64Decode(const char* b64message, unsigned char** buffer, size_t* length)
 {
@@ -33,7 +31,7 @@ static int Base64Decode(const char* b64message, unsigned char** buffer, size_t* 
 
 	BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL); //Do not use newlines to flush buffer
 	*length = BIO_read(bio, *buffer, strlen(b64message));
-	assert(*length == decodeLen); // length should equal decodeLen, else something went horribly wrong
+	ASSERT(*length == decodeLen); // length should equal decodeLen, else something went horribly wrong
 	BIO_free_all(bio);
 
 	return 0;
@@ -76,7 +74,6 @@ RtspServer::RtspServer(const std::string& sonosUdn)
 	ASSERT(LoadAirPortExpressKey());
 }
 
-
 RtspServer::~RtspServer()
 {
 	if (_airPortExpressKey)
@@ -86,6 +83,9 @@ RtspServer::~RtspServer()
 bool RtspServer::LoadAirPortExpressKey()
 {
 	FILE* fKey = fopen("private.key", "rb");
+
+	if (!fKey)
+		return false;
 
 	PEM_read_RSAPrivateKey(fKey, &_airPortExpressKey, nullptr, nullptr);
 
@@ -117,6 +117,8 @@ void RtspServer::OnRequest(NetworkServerConnection& connection, NetworkRequest& 
 
 void RtspServer::HandleOptions(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	TRACE("RTSPServer: Got OPTIONS request\n");
+
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Public", "OPTIONS, ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, GET_PARAMETER, SET_PARAMETER");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
@@ -153,7 +155,10 @@ void RtspServer::HandleOptions(NetworkServerConnection& connection, NetworkReque
 		// encrypt the apple response
 		unsigned char encAppleResp[1024];
 
-		int encLen = RSA_private_encrypt(32, rawAppleResp, encAppleResp, _airPortExpressKey, RSA_PKCS1_PADDING);
+		int encLen = 0;
+
+		if (_airPortExpressKey)
+			encLen = RSA_private_encrypt(32, rawAppleResp, encAppleResp, _airPortExpressKey, RSA_PKCS1_PADDING);
 
 		char* b64AppleResp = new char[2048];
 
@@ -170,6 +175,9 @@ void RtspServer::HandleOptions(NetworkServerConnection& connection, NetworkReque
 
 void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	TRACE("RTSPServer: Got ANNOUNCE request\n");
+
+
 	// needed from SDP portion of request
 	// a=rsaaeskey:<base64 key> - base64 decrypt RSA-OAEP
 	// a=aesiv:<iv> - init vector for music decrypt
@@ -206,7 +214,8 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 
 		Base64Decode(b64Key.c_str(), &encKey, &encKeyLen);
 
-		RSA_private_decrypt(encKeyLen, encKey, pRtspServerConnection->_aesKey, _airPortExpressKey, RSA_PKCS1_OAEP_PADDING);
+		if (_airPortExpressKey)
+			RSA_private_decrypt(encKeyLen, encKey, pRtspServerConnection->_aesKey, _airPortExpressKey, RSA_PKCS1_OAEP_PADDING);
 
 		delete[] encKey;
 	}
@@ -281,6 +290,8 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 
 void RtspServer::HandleSetup(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	TRACE("RTSPServer: Got SETUP request\n");
+
 	// nodetunes does:
 	// generate 3 random port numbers 5000..9999 for audio, control and timing
 	// call rtp.start() which creates UDP (dgram) sockets and binds them to the 3 ports
@@ -346,6 +357,8 @@ TRACE("Timing socket init\n");
 
 void RtspServer::HandleRecord(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	TRACE("RTSPServer: Got RECORD request\n");
+
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
 	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
@@ -356,6 +369,8 @@ void RtspServer::HandleRecord(NetworkServerConnection& connection, NetworkReques
 
 void RtspServer::HandleFlush(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	TRACE("RTSPServer: Got FLUSH request\n");
+
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
 	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
@@ -365,6 +380,8 @@ void RtspServer::HandleFlush(NetworkServerConnection& connection, NetworkRequest
 
 void RtspServer::HandleGetParameter(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	TRACE("RTSPServer: Got GET_PARAMETERS request\n");
+
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
 	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
@@ -372,18 +389,71 @@ void RtspServer::HandleGetParameter(NetworkServerConnection& connection, Network
 	connection.SendResponse(resp);
 }
 
-void RtspServer::ParseDmap(unsigned char* pData, int len)
+// FindContentCode() returns the first byte after the content code or nullptr
+unsigned char* RtspServer::FindContentCode(const char* pCode, unsigned char* pData, int len)
+{
+	unsigned char* pLoc = nullptr;
+
+	for (int i = 0; i < len - 4 - 4 + 1 && !pLoc; i++)
+	{
+		if (pData[i] == pCode[0] && pData[i + 1] == pCode[1] &&
+			pData[i + 2] == pCode[2] && pData[i + 3] == pCode[3])
+		{
+			pLoc = pData + i + 4;
+		}
+	}
+
+	return pLoc;
+}
+
+void RtspServer::ParseDmap(unsigned char* pData, int len, MetaData& meta)
 {
 	if (len < 4 || memcmp(pData, "mlit", 4))
 		return;
 
 	int itemSize = ntohl(*(int*)(pData + 4));
 
+	/*SET_PARAMETER rtsp://192.168.1.87/8891522206846895449 RTSP/1.0
+	RTP-Info: rtptime=1799381347
+	Content-Length: 134
+	Content-Type: application/x-dmap-tagged
+	CSeq: 8
+	DACP-ID: 2F56DAFF2A472297
+	Active-Remote: 1957818474
+	User-Agent: AirPlay/267.3
 
+	mlit...~mper.....H.D.>..asal....Mind Elevationasar....Nightmares on Waxascp....asgn....minm....On Days (bonus track)asdk.....caps.....*/
+
+	unsigned char* pContent = nullptr;
+	int fieldSize = 0;
+
+	meta.album = "";
+	meta.artist = "";
+	meta.title = "";
+
+	if ((pContent = FindContentCode("asal", pData + 8, itemSize)) != nullptr)
+	{
+		fieldSize = (ntohl(*(int*)pContent));
+		meta.album.assign((char*)pContent + 4, fieldSize);
+	}
+
+	if ((pContent = FindContentCode("asar", pData + 8, itemSize)) != nullptr)
+	{
+		fieldSize = (ntohl(*(int*)pContent));
+		meta.artist.assign((char*)pContent + 4, fieldSize);
+	}
+
+	if ((pContent = FindContentCode("minm", pData + 8, itemSize)) != nullptr)
+	{
+		fieldSize = (ntohl(*(int*)pContent));
+		meta.title.assign((char*)pContent + 4, fieldSize);
+	}
 }
 
 void RtspServer::HandleSetParameter(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	TRACE("RTSPServer: Got SET_PARAMETERS request\n");
+
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
 	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
@@ -415,16 +485,14 @@ void RtspServer::HandleSetParameter(NetworkServerConnection& connection, Network
 		// look for dmap metadata
 		else if (request.headerFieldMap["CONTENT-TYPE"] == "application/x-dmap-tagged")
 		{
-			/*SET_PARAMETER rtsp://192.168.1.87/8891522206846895449 RTSP/1.0
-RTP-Info: rtptime=1799381347
-Content-Length: 134
-Content-Type: application/x-dmap-tagged
-CSeq: 8
-DACP-ID: 2F56DAFF2A472297
-Active-Remote: 1957818474
-User-Agent: AirPlay/267.3
+			MetaData meta;
+			ParseDmap((unsigned char*)request.pContent, request.contentLength, meta);
+			TRACE("Metadata: [%s] [%s] [%s]\n", 
+				meta.album.c_str(), meta.artist.c_str(), meta.title.c_str());
 
-mlit...~mper.....H.D.>..asal....Mind Elevationasar....Nightmares on Waxascp....asgn....minm....On Days (bonus track)asdk.....caps.....*/
+			RtspServerConnection* pConn = dynamic_cast<RtspServerConnection*>(&connection);
+
+			StreamingServer::GetStreamingServer()->MetaDataUpdate(pConn->_streamId, meta);
 		}
 	}
 
@@ -433,13 +501,14 @@ mlit...~mper.....H.D.>..asal....Mind Elevationasar....Nightmares on Waxascp....a
 
 void RtspServer::HandleTeardown(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	TRACE("RTSPServer: Got TEARDOWN request\n");
+
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
 	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
 
 	connection.SendResponse(resp);
 }
-
 
 ///////////////////////////////////////////////////////////////////////////////
 // RtspServerConnection
@@ -472,6 +541,17 @@ RtspServerConnection::~RtspServerConnection()
 	delete _pTimingSocket;
 }
 
+bool RtspServerConnection::Close()
+{
+	// stop the Sonos playing if we've lost the AirPlay connection
+
+	RtspServer* pRtspServer = static_cast<RtspServer*>(_pServer);
+
+	SonosInterface::GetInstance()->Stop(pRtspServer->GetAssociatedSonos().c_str());
+
+	// now close as normal
+	return NetworkServerConnection::Close();
+}
 
 void RtspServerConnection::AudioThread()
 {

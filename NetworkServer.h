@@ -70,7 +70,7 @@ public:
 
 	bool Initialise(int connectionId);
 
-	bool Close();
+	virtual bool Close();
 
 	void GetIpAddress(unsigned char* pIpAddress); // ip address of this server
 	std::string GetIpAddress();
@@ -158,11 +158,11 @@ public:
 
 		while (_connectionList.size() > 0)
 		{
-			ConnectionType* pCon = dynamic_cast<ConnectionType*>(_connectionList.front());
+			ConnectionType* pConn = dynamic_cast<ConnectionType*>(_connectionList.front());
 			_connectionList.pop_front();
 
-			pCon->Close();
-			delete pCon;
+			pConn->Close();
+			delete pConn;
 		}
 	}
 
@@ -210,7 +210,6 @@ public:
 
 		return true;
 	}
-
 
 	// from NetworkServerInterface
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request) {}

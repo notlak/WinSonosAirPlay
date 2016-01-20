@@ -316,11 +316,6 @@ void NetworkServerConnection::ReadThread()
 			_pServer->RemoveConnection(_id);
 
 			break; // member vars will no longer be valid
-
-			// wake the transmit thread so it can end
-			//_transmitCv.notify_all();
-
-			//### call OnDisconnect()/OnSocketClosed() ???
 		}
 
 	}

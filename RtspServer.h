@@ -9,6 +9,7 @@
 
 #include <thread>
 
+struct MetaData;
 
 class RtspServerConnection : public NetworkServerConnection
 {
@@ -16,6 +17,8 @@ public:
 
 	RtspServerConnection(NetworkServerInterface* pServerInterface, SOCKET socket, SOCKADDR_IN& remoteAddr);
 	~RtspServerConnection();
+
+	virtual bool Close();
 
 	void AudioThread();
 	bool DecryptAudio(unsigned char* pEncBytes, int len, unsigned short& seq);
@@ -37,12 +40,13 @@ public:
 	int _streamId;
 };
 
-class RtspServer :
-	public NetworkServer<RtspServerConnection>
+class RtspServer : public NetworkServer<RtspServerConnection>
 {
 public:
 	RtspServer(const std::string& sonosUdn);
 	virtual ~RtspServer();
+
+	std::string GetAssociatedSonos() { return _sonosUdn; }
 
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request);
 
@@ -59,7 +63,8 @@ protected:
 	void HandleSetParameter(NetworkServerConnection& connection, NetworkRequest& request);
 	void HandleTeardown(NetworkServerConnection& connection, NetworkRequest& request);
 	
-	void ParseDmap(unsigned char* pData, int len);
+	void ParseDmap(unsigned char* pData, int len, MetaData& meta);
+	unsigned char* FindContentCode(const char* pCode, unsigned char* pData, int len);
 
 	RSA* _airPortExpressKey;
 	std::string _sonosUdn;

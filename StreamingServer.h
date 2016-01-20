@@ -6,6 +6,16 @@
 
 class StreamingServer;
 
+struct MetaData
+{
+	MetaData& operator=(const MetaData& m)
+	{album = m.album; artist = m.artist; title = m.title; return *this;}
+
+	std::string album;
+	std::string artist;
+	std::string title;
+};
+
 class StreamingServerStream
 {
 public:
@@ -34,13 +44,16 @@ public:
 	~StreamingServerConnection();
 
 	void TransmitStreamData(unsigned char* pData, int len);
-	void TransmitMetaData(const char* title, const char* url);
-
+	void TransmitMetaData();
+	void MetaDataUpdate(const MetaData& meta);
 
 	StreamingServer* _pStreamingServer;
 	int _streamIdRequested;
 	static const int MetaDataInterval = 8192;
 	int _metaCount; // count of bytes before next metadata block
+	MetaData _metaData;
+	bool _newMetaData;
+	std::mutex _metaMutex;
 };
 
 class StreamingServer : public NetworkServer<StreamingServerConnection>
@@ -57,7 +70,9 @@ public:
 	void CreateStream(int streamId);
 
 	// used by audio producer to push data to the stream
-	void AddStreamData(int stream, unsigned char* pData, int len);
+	void AddStreamData(int streamId, unsigned char* pData, int len);
+
+	void MetaDataUpdate(int streamId, const MetaData& meta);
 
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request);
 

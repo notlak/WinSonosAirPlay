@@ -925,6 +925,8 @@ void SonosInterface::UpnpSearchComplete()
 
 bool SonosInterface::Play(const char* pUdn)
 {
+	TRACE("Sonos: PLAY -> %s\n", pUdn);
+
 	SonosDevice dev;
 
 	if (!GetDeviceByUdn(pUdn, dev))
@@ -942,6 +944,8 @@ bool SonosInterface::Play(const char* pUdn)
 
 bool SonosInterface::Pause(const char* pUdn)
 {
+	TRACE("Sonos: PAUSE -> %s\n", pUdn);
+
 	SonosDevice dev;
 
 	if (!GetDeviceByUdn(pUdn, dev))
@@ -957,8 +961,29 @@ bool SonosInterface::Pause(const char* pUdn)
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
 }
 
+bool SonosInterface::Stop(const char* pUdn)
+{
+	TRACE("Sonos: STOP -> %s\n", pUdn);
+
+	SonosDevice dev;
+
+	if (!GetDeviceByUdn(pUdn, dev))
+		return false;
+
+	std::string req = CreateSoapRequest(AvTransportEndPoint,
+		dev._address.c_str(), dev._port,
+		R"(<u:Stop xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><Speed>1</Speed></u:Stop>)",
+		"urn:schemas-upnp-org:service:AVTransport:1#Stop");
+
+	std::string resp;
+
+	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
+}
+
 bool SonosInterface::SetVolume(const char* pUdn, int volume)
 {
+	TRACE("Sonos: VOLUME %d -> %s to %d\n", volume, pUdn);
+
 	SonosDevice dev;
 
 	if (!GetDeviceByUdn(pUdn, dev))
@@ -978,7 +1003,8 @@ bool SonosInterface::SetVolume(const char* pUdn, int volume)
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
 }
 
-/*POST /MediaRenderer/AVTransport/Control HTTP/1.1
+/* Example from Sonos Play:1
+POST /MediaRenderer/AVTransport/Control HTTP/1.1
 CONNECTION: close
 ACCEPT-ENCODING: gzip
 HOST: 192.168.1.67:1400
@@ -987,10 +1013,19 @@ CONTENT-LENGTH: 1021
 CONTENT-TYPE: text/xml; charset="utf-8"
 SOAPACTION: "urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI"
 
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><CurrentURI>x-rincon-mp3radio://streams.greenhost.nl:8080/hardbop.m3u</CurrentURI><CurrentURIMetaData>&lt;DIDL-Lite xmlns:dc=&quot;http://purl.org/dc/elements/1.1/&quot; xmlns:upnp=&quot;urn:schemas-upnp-org:metadata-1-0/upnp/&quot; xmlns:r=&quot;urn:schemas-rinconnetworks-com:metadata-1-0/&quot; xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/&quot;&gt;&lt;item id=&quot;R:0/0/13&quot; parentID=&quot;R:0/0&quot; restricted=&quot;true&quot;&gt;&lt;dc:title&gt;Test&lt;/dc:title&gt;&lt;upnp:class&gt;object.item.audioItem.audioBroadcast&lt;/upnp:class&gt;&lt;desc id=&quot;cdudn&quot; nameSpace=&quot;urn:schemas-rinconnetworks-com:metadata-1-0/&quot;&gt;SA_RINCON65031_&lt;/desc&gt;&lt;/item&gt;&lt;/DIDL-Lite&gt;</CurrentURIMetaData></u:SetAVTransportURI></s:Body></s:Envelope>*/
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+<s:Body>
+  <u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+    <InstanceID>0</InstanceID>
+    <CurrentURI>x-rincon-mp3radio://streams.greenhost.nl:8080/hardbop.m3u</CurrentURI>
+    <CurrentURIMetaData>&lt;DIDL-Lite xmlns:dc=&quot;http://purl.org/dc/elements/1.1/&quot; xmlns:upnp=&quot;urn:schemas-upnp-org:metadata-1-0/upnp/&quot; xmlns:r=&quot;urn:schemas-rinconnetworks-com:metadata-1-0/&quot; xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/&quot;&gt;&lt;item id=&quot;R:0/0/13&quot; parentID=&quot;R:0/0&quot; restricted=&quot;true&quot;&gt;&lt;dc:title&gt;Test&lt;/dc:title&gt;&lt;upnp:class&gt;object.item.audioItem.audioBroadcast&lt;/upnp:class&gt;&lt;desc id=&quot;cdudn&quot; nameSpace=&quot;urn:schemas-rinconnetworks-com:metadata-1-0/&quot;&gt;SA_RINCON65031_&lt;/desc&gt;&lt;/item&gt;&lt;/DIDL-Lite&gt;</CurrentURIMetaData>
+  </u:SetAVTransportURI>
+</s:Body></s:Envelope>
+*/
 
 bool SonosInterface::SetAvTransportUri(const char* pUdn, const char* pUri, const char* pTitle)
 {
+	TRACE("Sonos: URI %s -> %s\n", pUri, pUdn);
 	SonosDevice dev;
 
 	if (!GetDeviceByUdn(pUdn, dev))
@@ -1082,8 +1117,8 @@ std::string SonosInterface::CreateSoapRequest(const char* endPoint, const char* 
 
 	return req.str();
 }
-/*
 
+/*
 ---------------------------------------------------------
 Actual exchange from WireShark:
 
@@ -1138,6 +1173,5 @@ _body_: [has soap envelope around actual body]
 >>>actual "play" body
 
 <u:Play xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><Speed>1</Speed></u:Play>
-
 
 */
