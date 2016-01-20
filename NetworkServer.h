@@ -1,5 +1,6 @@
 #pragma once
 
+#include <WinSock2.h>
 #include <WS2tcpip.h>
 
 #include <thread>
@@ -7,9 +8,11 @@
 #include <map>
 #include <mutex>
 
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#endif
+#include "Log.h"
+
+//#ifdef _DEBUG
+//#define new DEBUG_NEW
+//#endif
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -178,7 +181,7 @@ public:
 		if (INVALID_SOCKET == _listeningSocket)
 		{
 			int err = WSAGetLastError();
-			TRACE("Error: unable to start listening, error %d\n", err);
+			LOG("Error: unable to start listening, error %d\n", err);
 			return false;
 		}
 

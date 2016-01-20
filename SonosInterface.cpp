@@ -1,7 +1,9 @@
 #include "stdafx.h"
 #include "SonosInterface.h"
 #include "tinyxml2.h"
+#include "Log.h"
 
+#include <comutil.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
@@ -13,9 +15,9 @@
 #pragma comment(lib, "oleaut32.lib")
 #pragma comment(lib, "user32.lib")
 
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#endif
+//#ifdef _DEBUG
+//#define new DEBUG_NEW
+//#endif
 
 const char* AvTransportEndPoint = "/MediaRenderer/AVTransport/Control";
 const char* RenderingEndPoint = "/MediaRenderer/RenderingControl/Control";
@@ -97,7 +99,7 @@ public:
 
 			if (SUCCEEDED(hr))
 			{
-				TRACE("Device Added: udn: %S, name: %S\n", udn, friendlyName);
+				LOG("Device Added: udn: %s, name: %s\n", (const char*)udn, (const char*)friendlyName);
 				::SysFreeString(friendlyName);
 			}
 			::SysFreeString(udn.GetBSTR());
@@ -139,7 +141,7 @@ public:
 
 	STDMETHODIMP DeviceRemoved(LONG lFindData, BSTR bstrUDN)
 	{
-		TRACE("Device Removed: udn: %S", bstrUDN);
+		LOG("Device Removed: udn: %S", bstrUDN);
 
 		_bstr_t udn(bstrUDN);
 
@@ -234,7 +236,7 @@ void SonosInterface::SearchThread()
 			}
 			else
 			{
-				TRACE("Error: StartAsyncSearch() failed\n");
+				LOG("Error: StartAsyncSearch() failed\n");
 			}
 		}
 
@@ -354,7 +356,7 @@ bool SonosInterface::FindSpeakers()
 						BSTR bstrName = NULL;
 						if (SUCCEEDED(pDevice->get_FriendlyName(&bstrName)))
 						{
-							TRACE("%S\n", bstrName);
+							LOG("%S\n", bstrName);
 							SysFreeString(bstrName);
 						}
 					}
@@ -483,13 +485,13 @@ bool SonosInterface::NetworkRequest(const char* ip, int port, const char* path, 
 	if (b == SOCKET_ERROR)
 	{
 		int err = WSAGetLastError();
-		TRACE("Error: %d\n", err);
+		LOG("Error: %d\n", err);
 	}
 
 	// receive response data - document
 	while ((b = recv(s, rbuff + rbshift, rbsize - rbshift, 0)) != SOCKET_ERROR)
 	{
-		TRACE("read %d bytes\n", b);
+		LOG("read %d bytes\n", b);
 		// finish loop if connection has been gracefully closed
 		if (b == 0)
 			break;
@@ -615,13 +617,13 @@ bool SonosInterface::HttpRequest(const char* ip, int port, const char* path, std
 	if (b == SOCKET_ERROR)
 	{
 		int err = WSAGetLastError();
-		TRACE("Error: %d\n", err);
+		LOG("Error: %d\n", err);
 	}
 
 	// receive response data - document
 	while ((b = recv(s, rbuff + rbshift, rbsize - rbshift, 0)) != SOCKET_ERROR)
 	{
-		TRACE("read %d bytes\n", b);
+		LOG("read %d bytes\n", b);
 		// finish loop if connection has been gracefully closed
 		if (b == 0)
 			break;
@@ -846,11 +848,11 @@ bool SonosInterface::ParseZoneTopology(const char* pXml)
 
 		}
 
-		TRACE("group:%s name:%s coordinator:%s\n", pElem->Attribute("group"), pElem->GetText(), pElem->Attribute("coordinator"));
+		LOG("group:%s name:%s coordinator:%s\n", pElem->Attribute("group"), pElem->GetText(), pElem->Attribute("coordinator"));
 		pElem = pElem->NextSiblingElement("ZonePlayer");
 	}
 
-	TRACE("Done\n");
+	LOG("Done\n");
 
 	return true;
 }
@@ -925,7 +927,7 @@ void SonosInterface::UpnpSearchComplete()
 
 bool SonosInterface::Play(const char* pUdn)
 {
-	TRACE("Sonos: PLAY -> %s\n", pUdn);
+	LOG("Sonos: PLAY -> %s\n", pUdn);
 
 	SonosDevice dev;
 
@@ -944,7 +946,7 @@ bool SonosInterface::Play(const char* pUdn)
 
 bool SonosInterface::Pause(const char* pUdn)
 {
-	TRACE("Sonos: PAUSE -> %s\n", pUdn);
+	LOG("Sonos: PAUSE -> %s\n", pUdn);
 
 	SonosDevice dev;
 
@@ -963,7 +965,7 @@ bool SonosInterface::Pause(const char* pUdn)
 
 bool SonosInterface::Stop(const char* pUdn)
 {
-	TRACE("Sonos: STOP -> %s\n", pUdn);
+	LOG("Sonos: STOP -> %s\n", pUdn);
 
 	SonosDevice dev;
 
@@ -982,7 +984,7 @@ bool SonosInterface::Stop(const char* pUdn)
 
 bool SonosInterface::SetVolume(const char* pUdn, int volume)
 {
-	TRACE("Sonos: VOLUME %d -> %s to %d\n", volume, pUdn);
+	LOG("Sonos: VOLUME %d -> %s\n", volume, pUdn);
 
 	SonosDevice dev;
 
@@ -1025,7 +1027,7 @@ SOAPACTION: "urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI"
 
 bool SonosInterface::SetAvTransportUri(const char* pUdn, const char* pUri, const char* pTitle)
 {
-	TRACE("Sonos: URI %s -> %s\n", pUri, pUdn);
+	LOG("Sonos: URI %s -> %s\n", pUri, pUdn);
 	SonosDevice dev;
 
 	if (!GetDeviceByUdn(pUdn, dev))

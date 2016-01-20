@@ -1,5 +1,7 @@
 #pragma once
 
+#include <WinSock2.h>
+
 #include <UPnP.h>
 
 #include <string>

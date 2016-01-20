@@ -2,14 +2,13 @@
 #include "NetworkServer.h"
 
 #include <WinSock2.h>
-#include <WS2tcpip.h>
 
 #include <algorithm>
 #include <sstream>
 
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#endif
+//#ifdef _DEBUG
+//#define new DEBUG_NEW
+//#endif
 
 /*
 template<class ConnectionType>
@@ -233,7 +232,7 @@ void NetworkServerConnection::ReadThread()
 
 				_rxBuffSize <<= 1;
 
-				TRACE("Rx buffer increased: %d\n", _rxBuffSize);
+				LOG("Rx buffer increased: %d\n", _rxBuffSize);
 
 				_pRxBuff = new char[_rxBuffSize];
 				memcpy(_pRxBuff, pOldBuff, _nRxBytes);
@@ -320,7 +319,7 @@ void NetworkServerConnection::ReadThread()
 
 	}
 
-	TRACE("Read thread complete\n");
+	LOG("Read thread complete\n");
 }
 
 void NetworkServerConnection::Transmit(const char* pBuff, int len)
@@ -372,7 +371,7 @@ tx:
 			if (SOCKET_ERROR == nBytes || 0 == nBytes)
 			{
 				int err = WSAGetLastError();
-				TRACE("Error: unable to transmit data %d\n", err);
+				LOG("Error: unable to transmit data %d\n", err);
 			}
 			else if (nBytes < pTxBuff->len)
 			{
@@ -387,7 +386,7 @@ tx:
 		}
 	}
 
-	TRACE("Transmit thread complete\n");
+	LOG("Transmit thread complete\n");
 }
 
 
@@ -402,7 +401,7 @@ NetworkRequest::NetworkRequest(const char* pHeader)
 	if (pHeader)
 	{
 		if (!ParseHeader(pHeader))
-			TRACE("Error: failed to parse header");
+			LOG("Error: failed to parse header");
 	}
 	
 }

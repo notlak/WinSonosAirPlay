@@ -6,9 +6,9 @@
 #include <sstream>
 #include <openssl\pem.h>
 
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#endif
+//#ifdef _DEBUG
+//#define new DEBUG_NEW
+//#endif
 
 static int Base64Decode(const char* b64message, unsigned char** buffer, size_t* length)
 {
@@ -31,7 +31,7 @@ static int Base64Decode(const char* b64message, unsigned char** buffer, size_t* 
 
 	BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL); //Do not use newlines to flush buffer
 	*length = BIO_read(bio, *buffer, strlen(b64message));
-	ASSERT(*length == decodeLen); // length should equal decodeLen, else something went horribly wrong
+
 	BIO_free_all(bio);
 
 	return 0;
@@ -71,7 +71,8 @@ static int Base64Encode(const unsigned char* buffer, size_t length, char* b64tex
 RtspServer::RtspServer(const std::string& sonosUdn)
 	: _airPortExpressKey(nullptr), _sonosUdn(sonosUdn)
 {
-	ASSERT(LoadAirPortExpressKey());
+	if (!LoadAirPortExpressKey())
+		LOG("Error: unable to load private.key\n");
 }
 
 RtspServer::~RtspServer()
@@ -117,7 +118,7 @@ void RtspServer::OnRequest(NetworkServerConnection& connection, NetworkRequest& 
 
 void RtspServer::HandleOptions(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	TRACE("RTSPServer: Got OPTIONS request\n");
+	LOG("RTSPServer: Got OPTIONS request\n");
 
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Public", "OPTIONS, ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, GET_PARAMETER, SET_PARAMETER");
@@ -175,7 +176,7 @@ void RtspServer::HandleOptions(NetworkServerConnection& connection, NetworkReque
 
 void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	TRACE("RTSPServer: Got ANNOUNCE request\n");
+	LOG("RTSPServer: Got ANNOUNCE request\n");
 
 
 	// needed from SDP portion of request
@@ -264,8 +265,6 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 			&pb, &mb, &kb,
 			&numChannels, &maxRun, &maxFrameBytes, &avgBitRate, &sampleRate);
 
-		ASSERT(nParams == 11);
-
 		//### check packing issues
 
 		pRtspServerConnection->_alacConfig.frameLength = frameLength;
@@ -290,7 +289,7 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 
 void RtspServer::HandleSetup(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	TRACE("RTSPServer: Got SETUP request\n");
+	LOG("RTSPServer: Got SETUP request\n");
 
 	// nodetunes does:
 	// generate 3 random port numbers 5000..9999 for audio, control and timing
@@ -304,17 +303,17 @@ void RtspServer::HandleSetup(NetworkServerConnection& connection, NetworkRequest
 	pConn->_pControlSocket = new CUdpSocket();
 	pConn->_pTimingSocket = new CUdpSocket();
 
-TRACE("Audio socket init\n");
+LOG("Audio socket init\n");
 	pConn->_pAudioSocket->Initialise();
-TRACE("Control socket init\n");
+LOG("Control socket init\n");
 	pConn->_pControlSocket->Initialise();
-TRACE("Timing socket init\n");
+LOG("Timing socket init\n");
 	pConn->_pTimingSocket->Initialise();
 
 
 	if (pConn->_pAudioSocket->GetPort() < 0 || pConn->_pControlSocket->GetPort() < 0 || pConn->_pTimingSocket->GetPort() < 0)
 	{
-		TRACE("Error: unable to create UDP sockets\n");
+		LOG("Error: unable to create UDP sockets\n");
 	}
 	else
 	{
@@ -357,7 +356,7 @@ TRACE("Timing socket init\n");
 
 void RtspServer::HandleRecord(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	TRACE("RTSPServer: Got RECORD request\n");
+	LOG("RTSPServer: Got RECORD request\n");
 
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
@@ -369,7 +368,7 @@ void RtspServer::HandleRecord(NetworkServerConnection& connection, NetworkReques
 
 void RtspServer::HandleFlush(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	TRACE("RTSPServer: Got FLUSH request\n");
+	LOG("RTSPServer: Got FLUSH request\n");
 
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
@@ -380,7 +379,7 @@ void RtspServer::HandleFlush(NetworkServerConnection& connection, NetworkRequest
 
 void RtspServer::HandleGetParameter(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	TRACE("RTSPServer: Got GET_PARAMETERS request\n");
+	LOG("RTSPServer: Got GET_PARAMETERS request\n");
 
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
@@ -452,7 +451,7 @@ void RtspServer::ParseDmap(unsigned char* pData, int len, MetaData& meta)
 
 void RtspServer::HandleSetParameter(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	TRACE("RTSPServer: Got SET_PARAMETERS request\n");
+	LOG("RTSPServer: Got SET_PARAMETERS request\n");
 
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
@@ -471,13 +470,13 @@ void RtspServer::HandleSetParameter(NetworkServerConnection& connection, Network
 				pos += 8;
 				float vol = (float)atof(content.substr(pos).c_str());
 
-				TRACE("Got AirPlay volume %f\n", vol);
+				LOG("Got AirPlay volume %f\n", vol);
 
 				vol = vol > -30.0f ? vol : -30.0f;
 
 				int sonosVol = 100 - (int)(-1.0f * (vol / 30.0f) * 100.0f);
 
-				TRACE("Setting Sonos volume to: %d\n", sonosVol);
+				LOG("Setting Sonos volume to: %d\n", sonosVol);
 
 				SonosInterface::GetInstance()->SetVolume(_sonosUdn.c_str(), sonosVol);
 			}
@@ -487,7 +486,7 @@ void RtspServer::HandleSetParameter(NetworkServerConnection& connection, Network
 		{
 			MetaData meta;
 			ParseDmap((unsigned char*)request.pContent, request.contentLength, meta);
-			TRACE("Metadata: [%s] [%s] [%s]\n", 
+			LOG("Metadata: [%s] [%s] [%s]\n", 
 				meta.album.c_str(), meta.artist.c_str(), meta.title.c_str());
 
 			RtspServerConnection* pConn = dynamic_cast<RtspServerConnection*>(&connection);
@@ -501,7 +500,7 @@ void RtspServer::HandleSetParameter(NetworkServerConnection& connection, Network
 
 void RtspServer::HandleTeardown(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	TRACE("RTSPServer: Got TEARDOWN request\n");
+	LOG("RTSPServer: Got TEARDOWN request\n");
 
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
@@ -527,7 +526,7 @@ RtspServerConnection::RtspServerConnection(NetworkServerInterface* pServerInterf
 
 RtspServerConnection::~RtspServerConnection()
 {
-	TRACE("RTSP connection for stream %d closed\n", _streamId);
+	LOG("RTSP connection for stream %d closed\n", _streamId);
 
 	_stopAudioThread = true;
 
@@ -555,7 +554,7 @@ bool RtspServerConnection::Close()
 
 void RtspServerConnection::AudioThread()
 {
-	TRACE("AudioThread() running stream %d...\n", _streamId);
+	LOG("AudioThread() running stream %d...\n", _streamId);
 
 	const int BufferSize = 2048;
 	char buffer[BufferSize];
@@ -573,16 +572,16 @@ void RtspServerConnection::AudioThread()
 			DecryptAudio((unsigned char*)buffer, nBytes, seq);
 			_transcoder.Write((unsigned char*)buffer + 12, nBytes - 12);
 
-			//TRACE("Received %d bytes from Audio port Seq:%d\n", nBytes, seq);
+			//LOG("Received %d bytes from Audio port Seq:%d\n", nBytes, seq);
 		}
 
 		nBytes = _pControlSocket->Read(buffer, BufferSize);
 		//if (nBytes > 0)
-		//TRACE("Received %d bytes from Control port\n", nBytes);
+		//LOG("Received %d bytes from Control port\n", nBytes);
 
 		nBytes = _pTimingSocket->Read(buffer, BufferSize);
 		//if (nBytes > 0)
-		//TRACE("Received %d bytes from Timing port\n", nBytes);
+		//LOG("Received %d bytes from Timing port\n", nBytes);
 	}
 
 }

@@ -4,42 +4,25 @@
 
 #include "stdafx.h"
 #include "WinAirSonos.h"
-#include "WinAirSonosDlg.h"
 #include "RtspServer.h"
 #include "StreamingServer.h"
-
-//#include "AirPlayRTSPServer.h"
-// live555 (RTSP/RTP server) includes
-//#include <BasicUsageEnvironment.hh>
-//#include <liveMedia.hh>
-//#include <RTSPCommon.hh> // for dateheader(
-//#include <Base64.hh>
+#include "Log.h"
 
 #include <string>
 #include <map>
 
-
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#endif
-
-// CWinAirSonosApp
-
-BEGIN_MESSAGE_MAP(CWinAirSonosApp, CWinApp)
-	ON_COMMAND(ID_HELP, &CWinApp::OnHelp)
-END_MESSAGE_MAP()
+//#ifdef _DEBUG
+//#define new DEBUG_NEW
+//#endif
 
 
-// CWinAirSonosApp construction
-
-CWinAirSonosApp::CWinAirSonosApp()
+CWinAirSonos::CWinAirSonos()
 {
-	// TODO: add construction code here, 
-	// Place all significant initialization in InitInstance
+
 }
 
 
-CWinAirSonosApp::~CWinAirSonosApp()
+CWinAirSonos::~CWinAirSonos()
 {
 	// stop advertising
 	for (auto it = _sdRefMap.begin(); it != _sdRefMap.end(); ++it)
@@ -62,12 +45,6 @@ CWinAirSonosApp::~CWinAirSonosApp()
 	WSACleanup();
 }
 
-
-// The one and only CWinAirSonosApp object
-
-CWinAirSonosApp theApp;
-
-
 // DNSServiceRegister callback
 static void DNSSD_API DNSServiceRegisterCallback(DNSServiceRef sdref, const DNSServiceFlags flags, DNSServiceErrorType errorCode,
 	const char *name, const char *regtype, const char *domain, void *context)
@@ -76,26 +53,26 @@ static void DNSSD_API DNSServiceRegisterCallback(DNSServiceRef sdref, const DNSS
 	(void)flags;    // Unused
 	(void)context;  // Unused
 
-	TRACE("Got a reply for service %s.%s%s: ", name, regtype, domain);
+	LOG("Got a reply for service %s.%s%s: ", name, regtype, domain);
 
 	if (errorCode == kDNSServiceErr_NoError)
 	{
 		if (flags & kDNSServiceFlagsAdd)
-			TRACE("Name now registered and active\n");
+			LOG("Name now registered and active\n");
 		else
-			TRACE("Name registration removed\n");
+			LOG("Name registration removed\n");
 	}
 	else if (errorCode == kDNSServiceErr_NameConflict)
 	{
-		TRACE("Name in use, please choose another\n");
+		LOG("Name in use, please choose another\n");
 	}
 	else
-		TRACE("Error %d\n", errorCode);
+		LOG("Error %d\n", errorCode);
 
 	//if (!(flags & kDNSServiceFlagsMoreComing)) fflush(stdout);
 }
 
-void CWinAirSonosApp::InitmDNS()
+void CWinAirSonos::InitmDNS()
 {
 	std::map<std::string, std::string> txtValuesMap = {
 		{ "txtvers", "1" },
@@ -128,7 +105,7 @@ void CWinAirSonosApp::InitmDNS()
 
 }
 
-void CWinAirSonosApp::AdvertiseServer(std::string name, int port)
+void CWinAirSonos::AdvertiseServer(std::string name, int port)
 {
 	DNSServiceRef sdRef;
 
@@ -138,13 +115,13 @@ void CWinAirSonosApp::AdvertiseServer(std::string name, int port)
 		DNSServiceRegisterCallback, nullptr);
 
 	if (err != kDNSServiceErr_NoError)
-		TRACE("Error: unable to register service with mdns\n");
+		LOG("Error: unable to register service with mdns\n");
 	else
 		_sdRefMap[name] = sdRef;
 
 }
 
-void CWinAirSonosApp::OnNewDevice(const SonosDevice& dev)
+void CWinAirSonos::OnNewDevice(const SonosDevice& dev)
 {
 	// create RtspServer
 
@@ -162,7 +139,7 @@ void CWinAirSonosApp::OnNewDevice(const SonosDevice& dev)
 		if (pAirPlayServer->StartListening(nullptr, port))
 		{
 			isListening = true;
-			TRACE("Starting RtspServer on port: %d\n", port);
+			LOG("Starting RtspServer on port: %d\n", port);
 		}
 		else
 		{
@@ -184,53 +161,17 @@ void CWinAirSonosApp::OnNewDevice(const SonosDevice& dev)
 	}
 	else
 	{
-		TRACE("Failed to start RtspServer for %s\n", dev._name.c_str());
+		LOG("Failed to start RtspServer for %s\n", dev._name.c_str());
 	}
 }
 
-void CWinAirSonosApp::OnDeviceRemoved(const SonosDevice& dev)
+void CWinAirSonos::OnDeviceRemoved(const SonosDevice& dev)
 {
 
 }
 
-
-// CWinAirSonosApp initialization
-
-BOOL CWinAirSonosApp::InitInstance()
+bool CWinAirSonos::Initialise()
 {
-	// InitCommonControlsEx() is required on Windows XP if an application
-	// manifest specifies use of ComCtl32.dll version 6 or later to enable
-	// visual styles.  Otherwise, any window creation will fail.
-	INITCOMMONCONTROLSEX InitCtrls;
-	InitCtrls.dwSize = sizeof(InitCtrls);
-	// Set this to include all the common control classes you want to use
-	// in your application.
-	InitCtrls.dwICC = ICC_WIN95_CLASSES;
-	InitCommonControlsEx(&InitCtrls);
-
-	CWinApp::InitInstance();
-
-	AfxEnableControlContainer();
-
-	// Create the shell manager, in case the dialog contains
-	// any shell tree view or shell list view controls.
-	CShellManager *pShellManager = new CShellManager;
-
-	// Activate "Windows Native" visual manager for enabling themes in MFC controls
-	CMFCVisualManager::SetDefaultManager(RUNTIME_CLASS(CMFCVisualManagerWindows));
-
-	// Standard initialization
-	// If you are not using these features and wish to reduce the size
-	// of your final executable, you should remove from the following
-	// the specific initialization routines you do not need FILE_ATTRIBUTE
-	// Change the registry key under which our settings are stored
-	// TODO: You should modify this string to be something appropriate
-	// such as the name of your company or organization
-	SetRegistryKey(_T("KODR"));
-
-	//------------------------------------------------------------------------------
-
-
 	// advertise a particular service via mdns
 
 	/*
@@ -292,7 +233,7 @@ BOOL CWinAirSonosApp::InitInstance()
 		DNSServiceRegisterCallback, nullptr);
 
 	if (err != kDNSServiceErr_NoError)
-		TRACE("Error: unable to register service with mdns\n");
+		LOG("Error: unable to register service with mdns\n");
 	
 	TXTRecordDeallocate(&txtRef);
 
@@ -326,62 +267,39 @@ BOOL CWinAirSonosApp::InitInstance()
 	}
 
 	if (isListening)
-		TRACE("Started StreamingServer on port: %d\n", port);
+		LOG("Started StreamingServer on port: %d\n", port);
 	else
-		TRACE("Error: unable to start stream server\n");
+		LOG("Error: unable to start stream server\n");
 
-	//RtspServer* pAirPlayServer = new RtspServer();
-	//pAirPlayServer->StartListening(nullptr, RTSP_PORT);
+	return true;
+}
 
-	// test SonosInterface
-	//SonosInterface sonos;
-	//sonos.Init();
-	//sonos.FindSpeakers();
-	//sonos.Test();
-
-	CWinAirSonosDlg dlg;
-	m_pMainWnd = &dlg;
-	INT_PTR nResponse = dlg.DoModal();
-	if (nResponse == IDOK)
-	{
-		// TODO: Place code here to handle when the dialog is
-		//  dismissed with OK
-	}
-	else if (nResponse == IDCANCEL)
-	{
-		// TODO: Place code here to handle when the dialog is
-		//  dismissed with Cancel
-	}
-	else if (nResponse == -1)
-	{
-		TRACE(traceAppMsg, 0, "Warning: dialog creation failed, so application is terminating unexpectedly.\n");
-		TRACE(traceAppMsg, 0, "Warning: if you are using MFC controls on the dialog, you cannot #define _AFX_NO_MFC_CONTROLS_IN_DIALOGS.\n");
-	}
-
-	// unregister mdns stuff
-
-	//DNSServiceRefDeallocate(sdRef);
-
-	// kill the AirPlay (music producing end first)
-
-	//delete pAirPlayServer;
-
-	// kill the streaming server
-
+void CWinAirSonos::Shutdown()
+{
 	StreamingServer::Delete();
+}
 
-	// kill RTSP server
-	// ### can't: delete rtspServer;
+#include <conio.h>
 
-	// Delete the shell manager created above.
-	if (pShellManager != NULL)
+int main()
+{
+	CWinAirSonos winAirSonos;
+
+	winAirSonos.Initialise();
+
+	// main loop
+
+	bool quit = false;
+
+	while (!quit)
 	{
-		delete pShellManager;
+		Sleep(500);
+		if (_kbhit())
+			LOG("Keypress %c\n", _getch());
 	}
 
+	winAirSonos.Shutdown();
 
-	// Since the dialog has been closed, return FALSE so that we exit the
-	//  application, rather than start the application's message pump.
-	return FALSE;
+	return 0;
 }
 

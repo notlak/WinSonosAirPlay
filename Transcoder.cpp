@@ -4,10 +4,10 @@
 
 #include <ALACBitUtilities.h>
 
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#endif
 
+//#ifdef _DEBUG
+//#define new DEBUG_NEW
+//#endif
 
 //FILE* fPcmFile;
 //FILE* fMp3File;
@@ -43,7 +43,7 @@ CTranscoder::~CTranscoder()
 
 void LameError(const char* format, va_list ap)
 {
-	TRACE("%s\n", format);
+	LOG("%s\n", format);
 }
 
 bool CTranscoder::Init(ALACSpecificConfig* alacConfig, int streamId)
@@ -78,7 +78,7 @@ bool CTranscoder::Init(ALACSpecificConfig* alacConfig, int streamId)
 
 	if (lame_init_params(_pLameGlobalFlags) < 0)
 	{
-		TRACE("Error: unable to initialise lame decoder\n");
+		LOG("Error: unable to initialise lame decoder\n");
 		return false;
 	}
 
@@ -97,7 +97,8 @@ bool CTranscoder::Write(unsigned char* pAlac, int len)
 
 	uint32_t nOutFrames = 0;
 
-	ASSERT(len <= _nInputPacketBytes);
+	if (len > _nInputPacketBytes)
+		LOG("CTranscoder::Write() assertion failed\n");
 	
 	memcpy(_pAlacInputBuffer, pAlac, len);
 
@@ -106,20 +107,24 @@ bool CTranscoder::Write(unsigned char* pAlac, int len)
 
 	int nOutBytes = nOutFrames * _alacConfig.numChannels * _alacConfig.bitDepth >> 3;
 
-	ASSERT(nOutBytes <= (_nInputPacketBytes - kALACMaxEscapeHeaderBytes));
+	if (nOutBytes > (_nInputPacketBytes - kALACMaxEscapeHeaderBytes))
+		LOG("CTranscoder::Write() assertion failed\n");
 
 	if (status < 0)
-		TRACE("Error: ALAC Decode returned %d\n", status);
+		LOG("Error: ALAC Decode returned %d\n", status);
 	//else
 	//	fwrite(_pAlacOutputBuffer, 1, nOutBytes, fPcmFile);
 	
 	int nMp3Bytes = lame_encode_buffer_interleaved(_pLameGlobalFlags, (short*)_pAlacOutputBuffer, nOutBytes >> 2, _pMp3Buffer, _nMp3Buffer);
 
-	ASSERT(nMp3Bytes <= _nMp3Buffer);
+	if (nMp3Bytes > _nMp3Buffer)
+	{
+		LOG("CTranscoder::Write() assertion failed\n");
+	}
 
 	if (nMp3Bytes < 0)
 	{
-		TRACE("Error: lame_encode_buffer() failed\n");
+		LOG("Error: lame_encode_buffer() failed\n");
 	}
 	else
 	{

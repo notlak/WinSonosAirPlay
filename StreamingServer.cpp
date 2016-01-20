@@ -4,9 +4,9 @@
 #include <sstream>
 #include <mutex>
 
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#endif
+//#ifdef _DEBUG
+//#define new DEBUG_NEW
+//#endif
 
 #define ONE_STREAM
 
@@ -66,7 +66,7 @@ void StreamingServer::CreateStream(int streamId)
 	if (_streamMap.find(streamId) == _streamMap.end())
 	{
 		_streamMap[streamId] = new StreamingServerStream(streamId, this);
-		TRACE("Created stream %d\n", streamId);
+		LOG("Created stream %d\n", streamId);
 	}
 #endif
 }
@@ -326,7 +326,7 @@ void StreamingServerStream::AddData(unsigned char* pData, int len)
 
 		_buffSize <<= 1; // double the size
 
-		TRACE("Increasing stream buffer size: %d\n", _buffSize);
+		LOG("Increasing stream buffer size: %d\n", _buffSize);
 
 		_pBuff = new unsigned char[_buffSize];
 

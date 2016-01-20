@@ -6,7 +6,6 @@
 // Transcode from ALAC -> PCM -> MP3 
 // may need to implement rate throttling?
 
-
 class CTranscoder
 {
 public:
@@ -32,4 +31,3 @@ protected:
 	int _streamId;
 	bool _shutdown;
 };
-

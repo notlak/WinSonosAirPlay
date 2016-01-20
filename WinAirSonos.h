@@ -4,12 +4,6 @@
 
 #pragma once
 
-#ifndef __AFXWIN_H__
-	#error "include 'stdafx.h' before including this file for PCH"
-#endif
-
-#include "resource.h"		// main symbols
-
 #include "SonosInterface.h"
 #include <map>
 #include <string>
@@ -24,22 +18,17 @@ class SonosInterface;
 // See WinAirSonos.cpp for the implementation of this class
 //
 
-class CWinAirSonosApp : public CWinApp, public SonosInterfaceClient
+class CWinAirSonos: public SonosInterfaceClient
 {
 public:
-	CWinAirSonosApp();
-	~CWinAirSonosApp();
+	CWinAirSonos();
+	~CWinAirSonos();
 
-// Overrides
-public:
-	virtual BOOL InitInstance();
+	bool Initialise();
+	void Shutdown();
 
 	virtual void OnNewDevice(const SonosDevice& dev);
 	virtual void OnDeviceRemoved(const SonosDevice& dev);
-
-// Implementation
-
-	DECLARE_MESSAGE_MAP()
 
 protected:
 
@@ -53,5 +42,3 @@ protected:
 	static const int TXTBuffLen = 1024;
 	char _txtBuff[TXTBuffLen];
 };
-
-extern CWinAirSonosApp theApp;

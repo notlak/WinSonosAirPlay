@@ -25,7 +25,7 @@ Content-Length: 41
 
 void HttpServer::OnRequest(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	TRACE("type:[%s] path:[%s] protocol:[%s]\n", 
+	LOG("type:[%s] path:[%s] protocol:[%s]\n", 
 		request.type.c_str(), request.path.c_str(), request.protocol.c_str());
 
 	// send response

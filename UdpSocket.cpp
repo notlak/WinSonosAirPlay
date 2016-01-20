@@ -1,9 +1,13 @@
 #include "stdafx.h"
 #include "UdpSocket.h"
+#include <WinSock2.h>
+#include <comutil.h>
 
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#endif
+#include "Log.h"
+
+//#ifdef _DEBUG
+//#define new DEBUG_NEW
+//#endif
 
 CUdpSocket::CUdpSocket()
 	:_socketListening(false), _socket(-1), _port(-1)
@@ -46,7 +50,7 @@ bool CUdpSocket::Initialise(int port)
 
 		if (bind(_socket, (struct sockaddr*)&addr, sizeof(addr)) < 0)
 		{
-			TRACE("Failed to create UDP socket on port: %d\n", port);
+			LOG("Failed to create UDP socket on port: %d\n", port);
 			port = (port + 1) % 65536;
 		}
 		else
