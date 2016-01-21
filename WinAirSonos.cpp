@@ -125,6 +125,8 @@ void CWinAirSonos::OnNewDevice(const SonosDevice& dev)
 {
 	// create RtspServer
 
+	LOG("CWinAirSonos::OnNewDevice()\n");
+
 	RtspServer* pAirPlayServer = new RtspServer(dev._udn);
 
 	const int minPort = 50002;
@@ -168,6 +170,16 @@ void CWinAirSonos::OnNewDevice(const SonosDevice& dev)
 void CWinAirSonos::OnDeviceRemoved(const SonosDevice& dev)
 {
 
+}
+
+void CWinAirSonos::ReadvertiseServers()
+{
+	LOG("CWinAirSonos::ReadvertiseServers()");
+	//### need to protect the map
+	for (auto it = _airplayServerMap.begin(); it != _airplayServerMap.end(); ++it)
+	{
+		AdvertiseServer(it->first, it->second->GetPort());
+	}
 }
 
 bool CWinAirSonos::Initialise()
@@ -295,7 +307,12 @@ int main()
 	{
 		Sleep(500);
 		if (_kbhit())
-			LOG("Keypress %c\n", _getch());
+		{
+			int c = _getch();
+			if (c == 'r' || c == 'R')
+				winAirSonos.ReadvertiseServers();
+		}
+		
 	}
 
 	winAirSonos.Shutdown();

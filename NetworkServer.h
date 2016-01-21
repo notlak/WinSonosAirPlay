@@ -145,6 +145,8 @@ class NetworkServer : public NetworkServerInterface
 public:
 	NetworkServer() :_pListeningThread(nullptr), _stopServer(false), _listeningSocket(INVALID_SOCKET), _nextConnectionId(0) {}
 
+	int GetPort() { return _port; }
+
 	virtual ~NetworkServer()
 	{
 		_stopServer = true;

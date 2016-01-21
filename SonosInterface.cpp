@@ -94,15 +94,15 @@ public:
 
 			gotUdn = true;
 
-			BSTR friendlyName;
-			hr = pDevice->get_FriendlyName(&friendlyName);
+			_bstr_t friendlyName;
+			hr = pDevice->get_FriendlyName(&friendlyName.GetBSTR());
 
 			if (SUCCEEDED(hr))
 			{
 				LOG("Device Added: udn: %s, name: %s\n", (const char*)udn, (const char*)friendlyName);
-				::SysFreeString(friendlyName);
+				//::SysFreeString(friendlyName);
 			}
-			::SysFreeString(udn.GetBSTR());
+			//::SysFreeString(udn.GetBSTR());
 		}
 
 		// find the url for device info
@@ -125,7 +125,7 @@ public:
 				devUrl = url;
 
 				// on finish release resources
-				SysFreeString(url.GetBSTR());
+				//SysFreeString(url.GetBSTR());
 
 				gotUrl = true;
 			}
@@ -491,7 +491,7 @@ bool SonosInterface::NetworkRequest(const char* ip, int port, const char* path, 
 	// receive response data - document
 	while ((b = recv(s, rbuff + rbshift, rbsize - rbshift, 0)) != SOCKET_ERROR)
 	{
-		LOG("read %d bytes\n", b);
+		LOG("SonosInterface::NetworkRequest() read %d bytes\n", b);
 		// finish loop if connection has been gracefully closed
 		if (b == 0)
 			break;

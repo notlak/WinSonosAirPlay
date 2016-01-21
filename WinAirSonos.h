@@ -27,6 +27,8 @@ public:
 	bool Initialise();
 	void Shutdown();
 
+	void ReadvertiseServers();
+
 	virtual void OnNewDevice(const SonosDevice& dev);
 	virtual void OnDeviceRemoved(const SonosDevice& dev);
 
