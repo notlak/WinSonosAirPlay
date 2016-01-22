@@ -561,6 +561,8 @@ void RtspServerConnection::AudioThread()
 
 	_transcoder.Init(&_alacConfig, _streamId); // streamId hardcoded to 1
 
+	unsigned short lastSeq = 0;
+
 	while (!_stopAudioThread)
 	{
 		int nBytes;
@@ -571,6 +573,11 @@ void RtspServerConnection::AudioThread()
 			unsigned short seq = 0;
 			DecryptAudio((unsigned char*)buffer, nBytes, seq);
 			_transcoder.Write((unsigned char*)buffer + 12, nBytes - 12);
+
+			if (lastSeq > 0 && seq - lastSeq != 1)
+				LOG("AudioThread() missing sequence %u -> %u\n", lastSeq, seq);
+
+			lastSeq = seq;
 
 			//LOG("Received %d bytes from Audio port Seq:%d\n", nBytes, seq);
 		}

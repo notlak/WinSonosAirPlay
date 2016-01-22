@@ -119,6 +119,8 @@ void CWinAirSonos::AdvertiseServer(std::string name, int port)
 	else
 		_sdRefMap[name] = sdRef;
 
+	LOG("Advertising %s on port %d\n", identifier.c_str(), port);
+
 }
 
 void CWinAirSonos::OnNewDevice(const SonosDevice& dev)
@@ -174,7 +176,7 @@ void CWinAirSonos::OnDeviceRemoved(const SonosDevice& dev)
 
 void CWinAirSonos::ReadvertiseServers()
 {
-	LOG("CWinAirSonos::ReadvertiseServers()");
+	LOG("CWinAirSonos::ReadvertiseServers()\n");
 	//### need to protect the map
 	for (auto it = _airplayServerMap.begin(); it != _airplayServerMap.end(); ++it)
 	{

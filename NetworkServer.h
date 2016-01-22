@@ -130,6 +130,7 @@ protected:
 class NetworkServerInterface // this is used to get over the problem of having a templated NetworkServer called from the Connection class
 {
 public:
+	virtual int GetPort() = 0;
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request) = 0;
 	virtual void RemoveConnection(int connectionId) = 0;
 
@@ -144,8 +145,6 @@ class NetworkServer : public NetworkServerInterface
 {
 public:
 	NetworkServer() :_pListeningThread(nullptr), _stopServer(false), _listeningSocket(INVALID_SOCKET), _nextConnectionId(0) {}
-
-	int GetPort() { return _port; }
 
 	virtual ~NetworkServer()
 	{
@@ -217,6 +216,7 @@ public:
 	}
 
 	// from NetworkServerInterface
+	virtual int GetPort() { return _port; }
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request) {}
 	virtual void RemoveConnection(int connectionId)
 	{

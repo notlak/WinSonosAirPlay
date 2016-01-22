@@ -251,6 +251,7 @@ void NetworkServerConnection::ReadThread()
 					headerLen = i;
 			}
 			*/
+
 			for (int i = 0; i <= _nRxBytes - 4 && headerLen < 0; i++)
 			{
 				if (_pRxBuff[i] == '\r' && _pRxBuff[i + 1] == '\n' && _pRxBuff[i + 2] == '\r' && _pRxBuff[i + 3] == '\n')
@@ -312,6 +313,8 @@ void NetworkServerConnection::ReadThread()
 
 			_pReadThread->detach();
 
+			LOG("Calling remove connection id:%d port:%d\n", _id, _pServer->GetPort());
+
 			_pServer->RemoveConnection(_id);
 
 			break; // member vars will no longer be valid
@@ -319,7 +322,7 @@ void NetworkServerConnection::ReadThread()
 
 	}
 
-	LOG("Read thread complete\n");
+	LOG("Receive thread complete\n");
 }
 
 void NetworkServerConnection::Transmit(const char* pBuff, int len)
@@ -386,7 +389,7 @@ tx:
 		}
 	}
 
-	LOG("Transmit thread complete\n");
+	LOG("Transmit thread complete port:%d\n", _pServer->GetPort());
 }
 
 
