@@ -73,6 +73,8 @@ RtspServer::RtspServer(const std::string& sonosUdn)
 {
 	if (!LoadAirPortExpressKey())
 		LOG("Error: unable to load private.key\n");
+
+	_sonosStreamId = StreamingServer::GetStreamId();
 }
 
 RtspServer::~RtspServer()
@@ -178,7 +180,6 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 {
 	LOG("RTSPServer: Got ANNOUNCE request\n");
 
-
 	// needed from SDP portion of request
 	// a=rsaaeskey:<base64 key> - base64 decrypt RSA-OAEP
 	// a=aesiv:<iv> - init vector for music decrypt
@@ -280,6 +281,17 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 		pRtspServerConnection->_alacConfig.sampleRate = sampleRate;
 	}
 
+	// look for the name of the AIrPlay device
+
+	pos = content.find("i=");
+
+	if (pos != std::string::npos)
+	{
+		pos += 2;
+		len = content.find('\r', pos) - pos;
+		pRtspServerConnection->_airplayDevice = content.substr(pos, len);
+	}
+
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
 	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
@@ -310,7 +322,6 @@ LOG("Control socket init\n");
 LOG("Timing socket init\n");
 	pConn->_pTimingSocket->Initialise();
 
-
 	if (pConn->_pAudioSocket->GetPort() < 0 || pConn->_pControlSocket->GetPort() < 0 || pConn->_pTimingSocket->GetPort() < 0)
 	{
 		LOG("Error: unable to create UDP sockets\n");
@@ -334,8 +345,11 @@ LOG("Timing socket init\n");
 		connection.SendResponse(resp);
 
 		// get a streamId
+		//pConn->_streamId = StreamingServer::GetStreamId();
 
-		pConn->_streamId = StreamingServer::GetStreamId();
+		// actually one will already have been associated to this server
+
+		pConn->_streamId = _sonosStreamId;
 
 		// tell the sonos to start playing the stream
 
@@ -347,8 +361,15 @@ LOG("Timing socket init\n");
 		//uri << "http://us1.internet-radio.com:8180/listen.pls&t=.m3u";
 		//uri << "x-rincon-mp3radio://http://www.voicerss.org/controls/speech.ashx?hl=en-gb&src=hello%20hazel%20you%20idiot&c=mp3&rnd=0.8578293843928012";
 
-		SonosInterface::GetInstance()->SetAvTransportUri(_sonosUdn.c_str(), uri.str().c_str(), "AirPlay");
-		SonosInterface::GetInstance()->Play(_sonosUdn.c_str());
+		std::string metadata("AirPlay");
+
+		if (!pConn->_airplayDevice.empty())
+			metadata = pConn->_airplayDevice;
+
+		//SonosInterface::GetInstance()->SetAvTransportUri(_sonosUdn.c_str(), uri.str().c_str(), metadata.c_str());
+		//SonosInterface::GetInstance()->Play(_sonosUdn.c_str());
+
+		SonosInterface::GetInstance()->PlayUri(_sonosUdn.c_str(), uri.str().c_str(), metadata.c_str());
 
 		pConn->_pAudioThread = new std::thread(&RtspServerConnection::AudioThread, pConn);
 	}

@@ -121,6 +121,8 @@ NetworkServerConnection::NetworkServerConnection(NetworkServerInterface* pServer
 	_nRxBytes(0),
 	_rxBuffSize(32768)
 {
+	char pBuff[INET_ADDRSTRLEN];
+	LOG("NetworkServerConnection() remote ip:%s\n", inet_ntop(AF_INET, (void*)&remoteAddr.sin_addr, pBuff, INET_ADDRSTRLEN));
 	//_pRxBuff = new char[RxBuffSize];
 	_pRxBuff = new char[_rxBuffSize];
 
@@ -140,13 +142,19 @@ NetworkServerConnection::~NetworkServerConnection()
 
 	delete[] _pRxBuff;
 
+	if (_pReadThread->joinable())
+		_pReadThread->join();
+
 	delete _pReadThread;
+	
 	delete _pTransmitThread;
 }
 
 bool NetworkServerConnection::Initialise(int connectionId)
 {
 	_id = connectionId;
+
+	LOG("NetworkServerConnection::Initialise() id:%d\n", _id);
 
 	// start the threads
 
@@ -306,16 +314,17 @@ void NetworkServerConnection::ReadThread()
 		}
 		else // socket has probably closed
 		{
-			int err = WSAGetLastError();
-
 			//_closeConnection = true;
 			//_socket = INVALID_SOCKET;
 
-			_pReadThread->detach();
+			if (!_closeConnection) // only do the following if we're not being shutdown already
+			{
+				_pReadThread->detach();
 
-			LOG("Calling remove connection id:%d port:%d\n", _id, _pServer->GetPort());
+				LOG("Calling remove connection id:%d port:%d\n", _id, _pServer->GetPort());
 
-			_pServer->RemoveConnection(_id);
+				_pServer->RemoveConnection(_id);
+			}
 
 			break; // member vars will no longer be valid
 		}
@@ -374,7 +383,7 @@ tx:
 			if (SOCKET_ERROR == nBytes || 0 == nBytes)
 			{
 				int err = WSAGetLastError();
-				LOG("Error: unable to transmit data %d\n", err);
+				LOG("Error: unable to transmit data id:%d %d\n", _id, err);
 			}
 			else if (nBytes < pTxBuff->len)
 			{

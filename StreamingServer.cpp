@@ -8,7 +8,7 @@
 //#define new DEBUG_NEW
 //#endif
 
-#define ONE_STREAM
+//#define ONE_STREAM
 
 ///////////////////////////////////////////////////////////////////////////////
 // StreamingServer implementation - this is a Singleton
@@ -75,6 +75,9 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 {
 	// assume path is of the form: /<stream id>/ or /<stream id>/listen.m3u
 
+	LOG("StreamingServer::OnRequest() id:%d %s %s\n", 
+		connection.GetId(), request.type.c_str(), request.path.c_str());
+
 	int startPos, endPos;
 	int streamId = -1;
 	std::string serialIdStr("");
@@ -107,6 +110,7 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 
 				resp.AddContent(body.str().c_str(), body.str().length());
 
+LOG("StreamingServer sending response to listen.m3u\n");
 				connection.SendResponse(resp);
 			}
 		}
@@ -139,11 +143,17 @@ void StreamingServer::OnRequest(NetworkServerConnection& connection, NetworkRequ
 					resp.AddHeaderField("icy-metaint", "8192"); // metadata every 8192 bytes
 					//resp.AddHeaderField("icy-metaint", "0");
 
+LOG("StreamingServer sending response to listen\n");
+
 				connection.SendResponse(resp);
 
 				//... then start sending data...
 			}
 		}
+	}
+	else
+	{
+		LOG("StreamingServer - unexpected request: %s\n", request.path.c_str());
 	}
 }
 

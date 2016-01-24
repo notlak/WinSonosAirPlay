@@ -42,6 +42,8 @@ CWinAirSonos::~CWinAirSonos()
 
 	SonosInterface::Delete();
 
+	StreamingServer::Delete();
+
 	WSACleanup();
 }
 
@@ -133,6 +135,8 @@ void CWinAirSonos::OnNewDevice(const SonosDevice& dev)
 
 	const int minPort = 50002;
 	const int maxPort = 65535;
+
+	srand(GetTickCount());
 
 	int port = minPort + (rand() * (maxPort - minPort + 1)) / RAND_MAX;
 
@@ -290,7 +294,7 @@ bool CWinAirSonos::Initialise()
 
 void CWinAirSonos::Shutdown()
 {
-	StreamingServer::Delete();
+
 }
 
 #include <conio.h>
@@ -307,12 +311,14 @@ int main()
 
 	while (!quit)
 	{
-		Sleep(500);
+		Sleep(200);
 		if (_kbhit())
 		{
 			int c = _getch();
 			if (c == 'r' || c == 'R')
 				winAirSonos.ReadvertiseServers();
+			else if (c == 'q' || c == 'Q')
+				quit = true;
 		}
 		
 	}

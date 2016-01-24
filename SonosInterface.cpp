@@ -196,7 +196,10 @@ SonosInterface::~SonosInterface()
 		CancelAsyncSearch();
 
 	if (_pSearchThread)
+	{
+		_pSearchThread->join();
 		delete _pSearchThread;
+	}
 
 	//CoUninitialize();
 }
@@ -470,19 +473,26 @@ bool SonosInterface::NetworkRequest(const char* ip, int port, const char* path, 
 	std::string headertail("\r\n");
 	document = "";
 
+	DWORD startTime = GetTickCount();
+
 	// create TCP socket
 	SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
-	DWORD timeOutMs = 2000;
-	setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeOutMs, sizeof DWORD);
+	DWORD timeOutMs = 5000;
+	//setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeOutMs, sizeof DWORD);
 
 	// connect socket
-	connect(s, (sockaddr*)&addr, sizeof(sockaddr_in));
+	if (connect(s, (sockaddr*)&addr, sizeof(sockaddr_in)) == SOCKET_ERROR)
+	{
+		int err = WSAGetLastError();
+
+		LOG("SonosInterface::NetworkRequest() connect failed: %d\n", err);
+	}
 
 	// send request
 	b = send(s, req, strlen(req), 0);
 
-	if (b == SOCKET_ERROR)
+	if (b == SOCKET_ERROR || b == 0)
 	{
 		int err = WSAGetLastError();
 		LOG("Error: %d\n", err);
@@ -491,7 +501,7 @@ bool SonosInterface::NetworkRequest(const char* ip, int port, const char* path, 
 	// receive response data - document
 	while ((b = recv(s, rbuff + rbshift, rbsize - rbshift, 0)) != SOCKET_ERROR)
 	{
-		LOG("SonosInterface::NetworkRequest() read %d bytes\n", b);
+		//LOG("SonosInterface::NetworkRequest() read %d bytes\n", b);
 		// finish loop if connection has been gracefully closed
 		if (b == 0)
 			break;
@@ -512,11 +522,20 @@ bool SonosInterface::NetworkRequest(const char* ip, int port, const char* path, 
 		}
 	}
 
+	if (b == SOCKET_ERROR)
+	{
+		DWORD now = GetTickCount();
+		int err = WSAGetLastError();
+		LOG("SonosInterface() recv error:%d read:%d delay:%dms\n", err, tb, now-startTime);
+	}
+
 	// close connection gracefully
 	shutdown(s, SD_SEND);
 	//while (int bc = recv(s, rbuff, rbsize, 0))
 	//if (bc == SOCKET_ERROR) break;
 	closesocket(s);
+
+LOG("tb: %d\n", tb);
 
 	// analyse received data
 	if (tb > 0)
@@ -528,6 +547,7 @@ bool SonosInterface::NetworkRequest(const char* ip, int port, const char* path, 
 		// check response code in header
 		if (respbuff.substr(0, respbuff.find("\r\n")).find("200 OK") != std::string::npos)
 		{
+LOG("Got 200 OK\n");
 			int cntlen_comp = 0;    // computed response's content length
 			int cntlen_get = 0;        // retrieved response's content length
 			std::string::size_type pos;
@@ -564,7 +584,15 @@ bool SonosInterface::NetworkRequest(const char* ip, int port, const char* path, 
 				}
 			}
 		}
+		else
+		{
+			std::string resp(respbuff.c_str(), 20);
+			resp += "\n";
+LOG("SonosInterface::NetworkRequest() bad response: %s\n", resp.c_str());
+		}
 	}
+
+LOG("Success: %d\n", success);
 
 	return success;
 }
@@ -925,13 +953,52 @@ void SonosInterface::UpnpSearchComplete()
 	_searchCompleted = true;
 }
 
-bool SonosInterface::Play(const char* pUdn)
+bool SonosInterface::PlayUri(std::string udn, std::string uri, std::string title)
 {
-	LOG("Sonos: PLAY -> %s\n", pUdn);
+	std::thread thread(&SonosInterface::PlayUriBlocking, this, udn, uri, title);
+	thread.detach();
+
+	return true;
+}
+
+bool SonosInterface::Stop(std::string udn)
+{
+	std::thread thread(&SonosInterface::StopBlocking, this, udn);
+	thread.detach();
+
+	return true;
+}
+
+bool SonosInterface::SetVolume(std::string udn, int volume)
+{
+	std::thread thread(&SonosInterface::SetVolumeBlocking, this, udn, volume);
+	thread.detach();
+
+	return true;
+}
+
+bool SonosInterface::PlayUriBlocking(std::string udn, std::string uri, std::string title)
+{
+	bool ok = false;
+
+	if (SetAvTransportUriBlocking(udn, uri, title))
+		if (PlayBlocking(udn.c_str()))
+			ok = true;
+		else
+			LOG("SonosInterface::Play() failed\n");
+	else
+		LOG("SonosInterface::SetAvTransportUri() failed\n");
+
+	return ok;
+}
+
+bool SonosInterface::PlayBlocking(std::string udn)
+{
+	LOG("Sonos: PLAY -> %s\n", udn.c_str());
 
 	SonosDevice dev;
 
-	if (!GetDeviceByUdn(pUdn, dev))
+	if (!GetDeviceByUdn(udn.c_str(), dev))
 		return false;
 
 	std::string req = CreateSoapRequest(AvTransportEndPoint,
@@ -944,13 +1011,13 @@ bool SonosInterface::Play(const char* pUdn)
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
 }
 
-bool SonosInterface::Pause(const char* pUdn)
+bool SonosInterface::PauseBlocking(std::string udn)
 {
-	LOG("Sonos: PAUSE -> %s\n", pUdn);
+	LOG("Sonos: PAUSE -> %s\n", udn.c_str());
 
 	SonosDevice dev;
 
-	if (!GetDeviceByUdn(pUdn, dev))
+	if (!GetDeviceByUdn(udn.c_str(), dev))
 		return false;
 
 	std::string req = CreateSoapRequest(AvTransportEndPoint,
@@ -963,13 +1030,13 @@ bool SonosInterface::Pause(const char* pUdn)
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
 }
 
-bool SonosInterface::Stop(const char* pUdn)
+bool SonosInterface::StopBlocking(std::string udn)
 {
-	LOG("Sonos: STOP -> %s\n", pUdn);
+	LOG("Sonos: STOP -> %s\n", udn.c_str());
 
 	SonosDevice dev;
 
-	if (!GetDeviceByUdn(pUdn, dev))
+	if (!GetDeviceByUdn(udn.c_str(), dev))
 		return false;
 
 	std::string req = CreateSoapRequest(AvTransportEndPoint,
@@ -982,13 +1049,13 @@ bool SonosInterface::Stop(const char* pUdn)
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
 }
 
-bool SonosInterface::SetVolume(const char* pUdn, int volume)
+bool SonosInterface::SetVolumeBlocking(std::string udn, int volume)
 {
-	LOG("Sonos: VOLUME %d -> %s\n", volume, pUdn);
+	LOG("Sonos: VOLUME %d -> %s\n", volume, udn.c_str());
 
 	SonosDevice dev;
 
-	if (!GetDeviceByUdn(pUdn, dev))
+	if (!GetDeviceByUdn(udn.c_str(), dev))
 		return false;
 
 	std::ostringstream body;
@@ -1025,17 +1092,17 @@ SOAPACTION: "urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI"
 </s:Body></s:Envelope>
 */
 
-bool SonosInterface::SetAvTransportUri(const char* pUdn, const char* pUri, const char* pTitle)
+bool SonosInterface::SetAvTransportUriBlocking(std::string udn, std::string uri, std::string title)
 {
-	LOG("Sonos: URI %s -> %s\n", pUri, pUdn);
+	LOG("Sonos: URI %s -> %s\n", uri.c_str(), udn.c_str());
 	SonosDevice dev;
 
-	if (!GetDeviceByUdn(pUdn, dev))
+	if (!GetDeviceByUdn(udn.c_str(), dev))
 		return false;
 
 	std::ostringstream body;
 	body << R"(<u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><CurrentURI>)"
-		<< pUri << "</CurrentURI><CurrentURIMetaData>" << FormatMetaData(pTitle) << "</CurrentURIMetaData></u:SetAVTransportURI>";
+		<< uri << "</CurrentURI><CurrentURIMetaData>" << FormatMetaData(title.c_str()) << "</CurrentURIMetaData></u:SetAVTransportURI>";
 
 	std::string req = CreateSoapRequest(AvTransportEndPoint,
 		dev._address.c_str(), dev._port, body.str().c_str(),

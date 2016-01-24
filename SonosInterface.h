@@ -8,7 +8,7 @@
 #include <list>
 #include <mutex>
 
-#define NO_SONOS
+//#define NO_SONOS
 
 class SonosDevice
 {
@@ -68,26 +68,22 @@ public:
 	void UpnpDeviceRemoved(const char* pUdn);
 	void UpnpSearchComplete();
 
-	bool Play(const char* pUdn);
-	bool Pause(const char* pUdn);
-	bool Stop(const char* pUdn);
-	bool SetAvTransportUri(const char* pUdn, const char* pUri, const char* pTitle);
-	bool SetVolume(const char* pUdn, int volume);
+	// these non-blocking calls start a new thread then call the blocking
+	// versions
+	bool PlayUri(std::string udn, std::string uri, std::string title);
+	bool Stop(std::string udn);
+	bool SetVolume(std::string udn, int volume);
 
-	bool Test()
-	{
-		if (_groupList.size() > 0)
-		{
-			std::string udn(_groupList.front()._coordinator);
-			if (!udn.empty())
-			{	
-				SetAvTransportUri(udn.c_str(), "x-rincon-mp3radio://www.bbc.co.uk/radio/listen/live/r3.asx", "rdok testing");
-				Play(udn.c_str());
-			}
-		}
-
-		return true;
-	}
+	// synchronous calls that wait for a response
+	// all the arguments are passed by value in case they are called as
+	// new thread functions (in which case the original values may go out
+	// of scope/be deleted before the methods are complete)
+	bool SetVolumeBlocking(std::string udn, int volume);
+	bool PlayUriBlocking(std::string udn, std::string uri, std::string title);
+	bool SetAvTransportUriBlocking(std::string udn, std::string uri, std::string title);
+	bool PlayBlocking(std::string udn);
+	bool PauseBlocking(std::string udn);
+	bool StopBlocking(std::string udn);
 
 protected:
 

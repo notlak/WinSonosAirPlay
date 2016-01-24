@@ -26,6 +26,8 @@ public:
 	unsigned char _aesKey[16]; // 128 bit AES CBC key for audio decrypt
 	unsigned char _aesIv[16];
 
+	std::string _airplayDevice; // from sdp 'i=' field
+
 	ALACSpecificConfig _alacConfig;
 
 	CUdpSocket* _pAudioSocket;
@@ -68,5 +70,8 @@ protected:
 
 	RSA* _airPortExpressKey;
 	std::string _sonosUdn;
+	int _sonosStreamId; // there is one RTSP server per Sonos device (actually group co-ordinator)
+	                  // a stream id is assigned here to that Sonos device which will be used
+	                  // in the shared StreamingServer
 };
 

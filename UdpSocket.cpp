@@ -29,6 +29,11 @@ bool CUdpSocket::Initialise(int port)
 		const int MinPort = 49152;
 		const int MaxPort = 65500;
 
+		LARGE_INTEGER perfCount;
+		QueryPerformanceCounter(&perfCount);
+
+		srand(perfCount.LowPart + rand());
+
 		port = MinPort + (rand() * (MaxPort - MinPort)) / RAND_MAX;
 	}
 
