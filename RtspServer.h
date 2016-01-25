@@ -45,7 +45,7 @@ public:
 class RtspServer : public NetworkServer<RtspServerConnection>
 {
 public:
-	RtspServer(const std::string& sonosUdn);
+	RtspServer(const std::string& sonosUdn, unsigned char* pMac);
 	virtual ~RtspServer();
 
 	std::string GetAssociatedSonos() { return _sonosUdn; }
@@ -73,5 +73,6 @@ protected:
 	int _sonosStreamId; // there is one RTSP server per Sonos device (actually group co-ordinator)
 	                  // a stream id is assigned here to that Sonos device which will be used
 	                  // in the shared StreamingServer
+	unsigned char _mac[8];
 };
 

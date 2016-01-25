@@ -10,6 +10,7 @@
 
 #include <string>
 #include <map>
+#include <sstream>
 
 //#ifdef _DEBUG
 //#define new DEBUG_NEW
@@ -107,11 +108,39 @@ void CWinAirSonos::InitmDNS()
 
 }
 
-void CWinAirSonos::AdvertiseServer(std::string name, int port)
+void CWinAirSonos::GenerateMac(const std::string& name, unsigned char* pMac)
+{
+	pMac[0] = 0x11;
+	pMac[1] = 0x22;
+	pMac[2] = 0x33;
+	pMac[3] = 0x44;
+	pMac[4] = 0x55;
+	pMac[5] = 0x66;
+	pMac[6] = 0x77;
+	pMac[7] = 0x88;
+
+	int len = name.length();
+	if (len > 8) len = 8;
+
+	for (int i = 0; i < len; i++)
+		pMac[i] ^= name[i];
+}
+
+void CWinAirSonos::AdvertiseServer(std::string name, int port, unsigned char* pMac)
 {
 	DNSServiceRef sdRef;
 
-	std::string identifier = "1122334455667788@" + name;
+	std::ostringstream s;
+	char hex[3];
+
+	for (int i = 0; i < 8; i++)
+	{
+		sprintf(hex, "%02X", pMac[i]);
+		s << hex;
+	}
+	s << "@" << name;
+
+	std::string identifier = s.str();//= "1122334455667788@" + name;
 
 	DNSServiceErrorType err = DNSServiceRegister(&sdRef, 0 /*flags*/, 0 /*interface index*/, identifier.c_str(), "_raop._tcp", nullptr, nullptr, htons(port), TXTRecordGetLength(&_txtRef), TXTRecordGetBytesPtr(&_txtRef),
 		DNSServiceRegisterCallback, nullptr);
@@ -131,7 +160,11 @@ void CWinAirSonos::OnNewDevice(const SonosDevice& dev)
 
 	LOG("CWinAirSonos::OnNewDevice()\n");
 
-	RtspServer* pAirPlayServer = new RtspServer(dev._udn);
+	unsigned char pMac[8];
+
+	GenerateMac(dev._name, pMac);
+
+	RtspServer* pAirPlayServer = new RtspServer(dev._udn, pMac);
 
 	const int minPort = 50002;
 	const int maxPort = 65535;
@@ -164,7 +197,7 @@ void CWinAirSonos::OnNewDevice(const SonosDevice& dev)
 
 		// advertise it via mDNS
 
-		AdvertiseServer(dev._name, port);
+		AdvertiseServer(dev._name, port, pMac);
 
 	}
 	else
@@ -182,9 +215,11 @@ void CWinAirSonos::ReadvertiseServers()
 {
 	LOG("CWinAirSonos::ReadvertiseServers()\n");
 	//### need to protect the map
+	unsigned char mac[8];
 	for (auto it = _airplayServerMap.begin(); it != _airplayServerMap.end(); ++it)
 	{
-		AdvertiseServer(it->first, it->second->GetPort());
+		GenerateMac(it->first, mac);
+		AdvertiseServer(it->first, it->second->GetPort(), mac);
 	}
 }
 

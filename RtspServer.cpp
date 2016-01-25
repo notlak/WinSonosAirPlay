@@ -68,11 +68,13 @@ static int Base64Encode(const unsigned char* buffer, size_t length, char* b64tex
 // RtspServer
 ///////////////////////////////////////////////////////////////////////////////
 
-RtspServer::RtspServer(const std::string& sonosUdn)
+RtspServer::RtspServer(const std::string& sonosUdn, unsigned char* pMac)
 	: _airPortExpressKey(nullptr), _sonosUdn(sonosUdn)
 {
 	if (!LoadAirPortExpressKey())
 		LOG("Error: unable to load private.key\n");
+
+	memcpy(_mac, pMac, 8);
 
 	_sonosStreamId = StreamingServer::GetStreamId();
 }
@@ -145,7 +147,9 @@ void RtspServer::HandleOptions(NetworkServerConnection& connection, NetworkReque
 		nRawAppleResp += 4;
 
 		// copy mac address in, think this can be same random one used in mDNS advertisement
-
+		memcpy(rawAppleResp + nRawAppleResp, _mac, 8);
+		nRawAppleResp += 8;
+		/*
 		rawAppleResp[nRawAppleResp++] = 0x11;
 		rawAppleResp[nRawAppleResp++] = 0x22;
 		rawAppleResp[nRawAppleResp++] = 0x33;
@@ -154,7 +158,7 @@ void RtspServer::HandleOptions(NetworkServerConnection& connection, NetworkReque
 		rawAppleResp[nRawAppleResp++] = 0x66;
 		rawAppleResp[nRawAppleResp++] = 0x77;
 		rawAppleResp[nRawAppleResp++] = 0x88;
-
+		*/
 		// encrypt the apple response
 		unsigned char encAppleResp[1024];
 

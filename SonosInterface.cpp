@@ -804,6 +804,22 @@ bool SonosInterface::ParseZoneTopology(const char* pXml)
 <ZonePlayer group='RINCON_5CAAFD2A5F9611400:1' coordinator='true' wirelessmode='1' hasconfiguredssid='1' channelfreq='2437' behindwifiext='0' wifienabled='1' location='http://192.168.1.68:1400/xml/device_description.xml' version='31.8-24090' mincompatibleversion='29.0-00000' legacycompatibleversion='24.0-00000' bootseq='4' uuid='RINCON_5CAAFD2A5F9611400'>Kitchen</ZonePlayer>
 </ZonePlayers><MediaServers><MediaServer location='192.168.1.68:3401' uuid='mobile-iPhone-3CA83CB2-36D0-4E58-AA2E-228617907F1C' version='' canbedisplayed='false' unavailable='false' type='0' ext=''>rdok-iPhone</MediaServer></MediaServers></ZPSupportInfo>
 )";
+
+/*CONTENT-TYPE: text/xml
+Server: Linux UPnP/1.0 Sonos/31.8-24090 (ZPS1)
+Connection: close
+
+<?xml version="1.0" ?>
+<?xml-stylesheet type="text/xsl" href="/xml/review.xsl"?>
+<ZPSupportInfo>
+<ZonePlayers>
+<ZonePlayer group='RINCON_5CAAFD2A5F9601400:1' coordinator='true' wirelessmode='1' hasconfiguredssid='1' channelfreq='2437' behindwifiext='0' wifienabled='1' location='http://192.168.1.67:1400/xml/device_description.xml' version='31.8-24090' mincompatibleversion='29.0-00000' legacycompatibleversion='24.0-00000' bootseq='10' uuid='RINCON_5CAAFD2A5F9601400'>Bedroom</ZonePlayer>
+<ZonePlayer group='RINCON_5CAAFD976C7001400:1' coordinator='true' wirelessmode='1' hasconfiguredssid='1' channelfreq='2437' behindwifiext='0' wifienabled='1' location='http://192.168.1.77:1400/xml/device_description.xml' version='31.8-24090' mincompatibleversion='29.0-00000' legacycompatibleversion='24.0-00000' bootseq='3' uuid='RINCON_5CAAFD976C7001400'>Kitchen</ZonePlayer>
+</ZonePlayers>
+<MediaServers>
+<MediaServer location='192.168.1.64:3401' uuid='mobile-iPhone-3CA83CB2-36D0-4E58-AA2E-228617907F1C' version='' canbedisplayed='false' unavailable='false' type='0' ext=''>rdok-iPhone</MediaServer>
+</MediaServers></ZPSupportInfo>*/
+
 	
 	tinyxml2::XMLDocument xmlDoc;
 
@@ -872,6 +888,11 @@ bool SonosInterface::ParseZoneTopology(const char* pXml)
 					group._coordinator = dev._udn;
 
 				_groupList.push_back(group);
+
+				// let the client know about a new device
+
+				if (_pClient && dev._isCoordinator)
+					_pClient->OnNewDevice(dev);
 			}
 
 		}
@@ -930,11 +951,12 @@ void SonosInterface::UpnpDeviceAdded(const char* pUdn, const char* pUrl)
 			}
 		}
 
-		SonosDevice d;
-		if (_pClient && GetDeviceByUdn(pUdn, d) && d._isCoordinator)
-		{
-			_pClient->OnNewDevice(d);
-		}
+		// Now done in ParseZoneTopology
+		//SonosDevice d;
+		//if (_pClient && GetDeviceByUdn(pUdn, d) && d._isCoordinator)
+		//{
+		//	_pClient->OnNewDevice(d);
+		//}
 	}
 }
 

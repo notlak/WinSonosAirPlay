@@ -35,7 +35,8 @@ public:
 protected:
 
 	void InitmDNS();
-	void AdvertiseServer(std::string name, int port);
+	void AdvertiseServer(std::string name, int port, unsigned char* pMac);
+	void GenerateMac(const std::string& name, unsigned char* pMac);
 
 	std::map<std::string, RtspServer*> _airplayServerMap;
 	std::map<std::string, DNSServiceRef> _sdRefMap;
