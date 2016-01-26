@@ -49,7 +49,7 @@ CWinAirSonos::~CWinAirSonos()
 }
 
 // DNSServiceRegister callback
-static void DNSSD_API DNSServiceRegisterCallback(DNSServiceRef sdref, const DNSServiceFlags flags, DNSServiceErrorType errorCode,
+static void DNSSD_API DNSServiceRegisterCallback(DNSServiceRef sdref, DNSServiceFlags flags, DNSServiceErrorType errorCode,
 	const char *name, const char *regtype, const char *domain, void *context)
 {
 	(void)sdref;    // Unused
@@ -214,7 +214,16 @@ void CWinAirSonos::OnDeviceRemoved(const SonosDevice& dev)
 void CWinAirSonos::ReadvertiseServers()
 {
 	LOG("CWinAirSonos::ReadvertiseServers()\n");
-	//### need to protect the map
+
+	// unregister everything
+	for (auto it = _sdRefMap.begin(); it != _sdRefMap.end(); ++it)
+		DNSServiceRefDeallocate(it->second);
+
+	_sdRefMap.clear();
+
+	//### need to protect the map with a mutex if this is going to be used 
+	
+	// now re-advertise all the RTSP servers
 	unsigned char mac[8];
 	for (auto it = _airplayServerMap.begin(); it != _airplayServerMap.end(); ++it)
 	{

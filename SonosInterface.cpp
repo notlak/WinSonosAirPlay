@@ -450,11 +450,6 @@ bool SonosInterface::NetworkRequest(const char* ip, int port, const char* path, 
 	return true;
 #endif
 
-	///// this should have been done by live555 stuff
-	// initialize Winsock library
-	//WSADATA wsadata;
-	//WSAStartup(MAKEWORD(2, 2), &wsadata);
-
 	bool success = false;
 
 	// prepare inet address from URL of document
@@ -589,6 +584,11 @@ LOG("Got 200 OK\n");
 			std::string resp(respbuff.c_str(), 20);
 			resp += "\n";
 LOG("SonosInterface::NetworkRequest() bad response: %s\n", resp.c_str());
+
+FILE* fReq = fopen("FailedReq.txt", "w");
+fwrite(req, strlen(req), 1, fReq);
+fclose(fReq);
+
 		}
 	}
 
