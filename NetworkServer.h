@@ -80,6 +80,8 @@ public:
 
 	int GetId() { return _id; }
 
+	int TransmitBufferEntries();
+
 	virtual void Transmit(const char* buff, int len);
 	virtual void SendResponse(const NetworkResponse& response);
 
@@ -133,7 +135,6 @@ public:
 	virtual int GetPort() = 0;
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request) = 0;
 	virtual void RemoveConnection(int connectionId) = 0;
-
 };
 
 ///////////////////////////////////////////////////////////////////////////////

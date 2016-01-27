@@ -345,7 +345,9 @@ void NetworkServerConnection::Transmit(const char* pBuff, int len)
 
 	_txQueue.push_back(pTxBuff);
 
-	_transmitCv.notify_all();
+	lock.unlock(); // don't need to be locked to notify
+
+	_transmitCv.notify_one(); // only 1 waiting thread
 }
 
 void NetworkServerConnection::SendResponse(const NetworkResponse& response)
@@ -371,7 +373,7 @@ void NetworkServerConnection::TransmitThread()
 	while (!_closeConnection)
 	{
 		std::unique_lock<std::mutex> lock(_transmitMutex);
-		_transmitCv.wait(lock);
+		_transmitCv.wait(lock); // this unlocks the mutex
 		
 		while (!_closeConnection && _txQueue.size() > 0)
 		{
@@ -394,13 +396,17 @@ tx:
 
 			_txQueue.pop_front();
 			delete pTxBuff;
-
 		}
 	}
 
 	LOG("Transmit thread complete port:%d\n", _pServer->GetPort());
 }
 
+int NetworkServerConnection::TransmitBufferEntries()
+{
+	std::lock_guard<std::mutex> lock(_transmitMutex);
+	return _txQueue.size();
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // NetworkRequest implementation

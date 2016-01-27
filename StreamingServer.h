@@ -8,8 +8,9 @@ class StreamingServer;
 
 struct MetaData
 {
-	MetaData& operator=(const MetaData& m)
-	{album = m.album; artist = m.artist; title = m.title; return *this;}
+	MetaData() {}
+	MetaData(const MetaData& m) { *this = m; }
+	MetaData& operator=(const MetaData& m) {album = m.album; artist = m.artist; title = m.title; return *this;}
 
 	std::string album;
 	std::string artist;
@@ -49,6 +50,7 @@ public:
 
 	StreamingServer* _pStreamingServer;
 	int _streamIdRequested;
+	bool _sendAudio; // mustn't send audio data until we've responded to the request
 	static const int MetaDataInterval = 8192;
 	int _metaCount; // count of bytes before next metadata block
 	MetaData _metaData;
@@ -77,10 +79,13 @@ public:
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request);
 
 	// called by Stream to actually transmit the data
-	void TransmitStreamData(int streamId, unsigned char* pData, int len);
+	//void TransmitStreamData(int streamId, unsigned char* pData, int len);
 
 	std::map<int, StreamingServerStream*> _streamMap;
 	std::mutex _streamMapMutex;
+
+	std::map<int, MetaData> _metaCacheMap; // often get metadata before stream is set up so store here then forward
+	std::mutex _metaCacheMutex;
 
 	static StreamingServer* InstancePtr;
 	static int NextStreamId;

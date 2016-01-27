@@ -147,7 +147,36 @@ LOG("StreamingServer sending response to listen\n");
 
 				connection.SendResponse(resp);
 
+				// see if we've got any metadata for this stream
+
+				MetaData meta;
+				bool gotMeta = false;
+
+				{ // scope for metadata lock
+					std::lock_guard<std::mutex> metaLock(_metaCacheMutex);
+					if (_metaCacheMap.find(streamId) != _metaCacheMap.end())
+					{
+						meta = _metaCacheMap[streamId];
+						gotMeta = true;
+					}
+				}
+
+				if (gotMeta)
+					MetaDataUpdate(streamId, meta);
+
 				//... then start sending data...
+
+				// make sure we've actually sent the response first
+				DWORD now = GetTickCount(), duration = 0;
+				const DWORD TimeOut = 2000;
+		
+				while (connection.TransmitBufferEntries() > 0 && (duration = GetTickCount() - now) < TimeOut)
+					std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+				if (duration >= TimeOut)
+					LOG("StreamingServer::OnRequest() Error: timeout waiting for response to be sent\n");
+				else
+					static_cast<StreamingServerConnection*>(&connection)->_sendAudio = true;
 			}
 		}
 	}
@@ -175,13 +204,12 @@ void StreamingServer::AddStreamData(int streamId, unsigned char* pData, int len)
 	for (auto it = _connectionList.begin(); it != _connectionList.end(); ++it)
 	{
 		StreamingServerConnection* pConn = dynamic_cast<StreamingServerConnection*>(*it);
-		if (pConn->_streamIdRequested == streamId)
-		{
+		if (pConn->_streamIdRequested == streamId && pConn->_sendAudio)
 			pConn->TransmitStreamData(pData, len);
-		}
 	}
 }
 
+/*
 // called from a StreamingServerStream instance
 void StreamingServer::TransmitStreamData(int streamId, unsigned char* pData, int len)
 {
@@ -196,21 +224,29 @@ void StreamingServer::TransmitStreamData(int streamId, unsigned char* pData, int
 			pConn->Transmit((char*)pData, len);
 	}
 }
+*/
 
 void StreamingServer::MetaDataUpdate(int streamId, const MetaData& meta)
 {
-	std::lock_guard<std::mutex> lock(_connectionListMutex);
+	{ // scope for connectionList lock
 
-	// send data out on each connection listening to this stream
-	for (std::list<NetworkServerConnection*>::iterator it = _connectionList.begin(); it != _connectionList.end(); ++it)
-	{
-		StreamingServerConnection* pConn = dynamic_cast<StreamingServerConnection*>(*it);
-		if (streamId == pConn->_streamIdRequested)
-			pConn->MetaDataUpdate(meta);
+		std::lock_guard<std::mutex> lock(_connectionListMutex);
+
+		// send data out on each connection listening to this stream
+		for (std::list<NetworkServerConnection*>::iterator it = _connectionList.begin(); it != _connectionList.end(); ++it)
+		{
+			StreamingServerConnection* pConn = dynamic_cast<StreamingServerConnection*>(*it);
+			if (streamId == pConn->_streamIdRequested)
+				pConn->MetaDataUpdate(meta);
+		}
 	}
+
+	// add to the metadata cache as we tend to get the data before
+	// the Sonos has connected
+
+	std::lock_guard<std::mutex> metaLock(_metaCacheMutex);
+	_metaCacheMap[streamId] = meta;
 }
-
-
 
 ///////////////////////////////////////////////////////////////////////////////
 // StreamingServerConnection implementation
@@ -218,7 +254,8 @@ void StreamingServer::MetaDataUpdate(int streamId, const MetaData& meta)
 
 StreamingServerConnection::StreamingServerConnection(NetworkServerInterface* pServerInterface, SOCKET socket, SOCKADDR_IN& remoteAddr)
 	: NetworkServerConnection(pServerInterface, socket, remoteAddr),
-	_streamIdRequested(-1), _metaCount(0), _newMetaData(false)
+	_streamIdRequested(-1), _metaCount(0), _newMetaData(false),
+	_sendAudio(false)
 {
 
 }
