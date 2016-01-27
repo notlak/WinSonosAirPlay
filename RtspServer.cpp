@@ -360,7 +360,7 @@ LOG("Timing socket init\n");
 		std::ostringstream uri;
 		
 		uri << "x-rincon-mp3radio://" << connection.GetIpAddress() << ":" << StreamingServer::GetPort() <<
-			"/" << pConn->_streamId << "/listen.m3u";
+			"/" << pConn->_streamId << "/listen"; // /listen.m3u - seems an unnecessary step
 			
 		//uri << "http://us1.internet-radio.com:8180/listen.pls&t=.m3u";
 		//uri << "x-rincon-mp3radio://http://www.voicerss.org/controls/speech.ashx?hl=en-gb&src=hello%20hazel%20you%20idiot&c=mp3&rnd=0.8578293843928012";
