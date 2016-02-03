@@ -581,7 +581,7 @@ void RtspServerConnection::AudioThread()
 {
 	LOG("AudioThread() running stream %d...\n", _streamId);
 
-	const int BufferSize = 2048;
+	const int BufferSize = 4096;
 	char buffer[BufferSize];
 
 	_transcoder.Init(&_alacConfig, _streamId); // streamId hardcoded to 1
@@ -593,14 +593,14 @@ void RtspServerConnection::AudioThread()
 		int nBytes;
 
 		nBytes = _pAudioSocket->Read(buffer, BufferSize);
-		if (nBytes > 0)
+		while (nBytes > 0) // priority to audio data
 		{
 			unsigned short seq = 0;
 			DecryptAudio((unsigned char*)buffer, nBytes, seq);
 			_transcoder.Write((unsigned char*)buffer + 12, nBytes - 12);
 
-			if (lastSeq > 0 && seq - lastSeq != 1)
-				LOG("AudioThread() missing sequence %u -> %u\n", lastSeq, seq);
+			//if (lastSeq > 0 && seq - lastSeq != 1)
+				//LOG("AudioThread() missing sequence %u -> %u\n", lastSeq, seq);
 
 			lastSeq = seq;
 
@@ -614,6 +614,8 @@ void RtspServerConnection::AudioThread()
 		nBytes = _pTimingSocket->Read(buffer, BufferSize);
 		//if (nBytes > 0)
 		//LOG("Received %d bytes from Timing port\n", nBytes);
+
+		Sleep(10);
 	}
 
 }
