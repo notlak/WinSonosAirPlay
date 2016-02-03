@@ -7,6 +7,7 @@
 #include "RtspServer.h"
 #include "StreamingServer.h"
 #include "Log.h"
+#include "StatsCollector.h"
 
 #include <string>
 #include <map>
@@ -353,6 +354,8 @@ int main()
 
 	bool quit = false;
 
+	DWORD lastStatsOutput = 0;
+
 	while (!quit)
 	{
 		Sleep(200);
@@ -365,6 +368,17 @@ int main()
 				quit = true;
 		}
 		
+		DWORD now = GetTickCount();
+
+		if (now - lastStatsOutput > 4000)
+		{
+			StatsCollector::Stats s = StatsCollector::GetInstance()->GetandReset();
+
+			LOG("STATS rxPackets:%d rxBytes:%d missedPackets:%d\n",
+				s.rxPackets, s.rxBytes, s.missedPackets);
+
+			lastStatsOutput = now;
+		}
 	}
 
 	winAirSonos.Shutdown();

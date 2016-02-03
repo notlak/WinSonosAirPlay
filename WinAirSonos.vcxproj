@@ -209,6 +209,7 @@
     <ClInclude Include="NetworkServer.h" />
     <ClInclude Include="RtspServer.h" />
     <ClInclude Include="SonosInterface.h" />
+    <ClInclude Include="StatsCollector.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="StreamingServer.h" />
     <ClInclude Include="targetver.h" />
@@ -223,6 +224,7 @@
     <ClCompile Include="NetworkServer.cpp" />
     <ClCompile Include="RtspServer.cpp" />
     <ClCompile Include="SonosInterface.cpp" />
+    <ClCompile Include="StatsCollector.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

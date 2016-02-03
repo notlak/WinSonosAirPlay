@@ -2,6 +2,7 @@
 #include "RtspServer.h"
 #include "StreamingServer.h"
 #include "SonosInterface.h"
+#include "StatsCollector.h"
 
 #include <sstream>
 #include <openssl\pem.h>
@@ -588,12 +589,14 @@ void RtspServerConnection::AudioThread()
 
 	unsigned short lastSeq = 0;
 
+	StatsCollector* pStats = StatsCollector::GetInstance();
+
 	while (!_stopAudioThread)
 	{
 		int nBytes;
 
-		nBytes = _pAudioSocket->Read(buffer, BufferSize);
-		while (nBytes > 0) // priority to audio data
+		while ((nBytes = _pAudioSocket->Read(buffer, BufferSize)) > 0)
+		//if (nBytes > 0) // priority to audio data
 		{
 			unsigned short seq = 0;
 			DecryptAudio((unsigned char*)buffer, nBytes, seq);
@@ -602,7 +605,13 @@ void RtspServerConnection::AudioThread()
 			//if (lastSeq > 0 && seq - lastSeq != 1)
 				//LOG("AudioThread() missing sequence %u -> %u\n", lastSeq, seq);
 
+			if (lastSeq > 0 && seq-lastSeq != 1 && (seq - lastSeq) < 32767)
+				pStats->AddMissedPackets(seq-lastSeq-1);
+
 			lastSeq = seq;
+
+			pStats->AddRxPacket();
+			pStats->AddRxBytes(nBytes);
 
 			//LOG("Received %d bytes from Audio port Seq:%d\n", nBytes, seq);
 		}
