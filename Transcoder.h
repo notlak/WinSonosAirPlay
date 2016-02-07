@@ -15,6 +15,8 @@ public:
 	bool Init(ALACSpecificConfig* alacConfig, int streamId);
 
 	bool Write(unsigned char* pAlac, int len);
+	bool WriteSilence(int nPackets);
+
 	//bool Read(unsigned char* pMp3, int maxLen);
 
 protected:

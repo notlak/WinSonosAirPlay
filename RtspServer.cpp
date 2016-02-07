@@ -600,13 +600,17 @@ void RtspServerConnection::AudioThread()
 		{
 			unsigned short seq = 0;
 			DecryptAudio((unsigned char*)buffer, nBytes, seq);
-			_transcoder.Write((unsigned char*)buffer + 12, nBytes - 12);
 
 			//if (lastSeq > 0 && seq - lastSeq != 1)
 				//LOG("AudioThread() missing sequence %u -> %u\n", lastSeq, seq);
 
-			if (lastSeq > 0 && seq-lastSeq != 1 && (seq - lastSeq) < 32767)
-				pStats->AddMissedPackets(seq-lastSeq-1);
+			if (lastSeq > 0 && seq - lastSeq != 1 && seq > lastSeq)
+			{
+				pStats->AddMissedPackets(seq - lastSeq - 1);
+				_transcoder.WriteSilence(seq - lastSeq - 1);
+			}
+
+			_transcoder.Write((unsigned char*)buffer + 12, nBytes - 12);
 
 			lastSeq = seq;
 

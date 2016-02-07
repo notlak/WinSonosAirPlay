@@ -107,6 +107,8 @@ bool CTranscoder::Write(unsigned char* pAlac, int len)
 
 	int nOutBytes = nOutFrames * _alacConfig.numChannels * _alacConfig.bitDepth >> 3;
 
+	//LOG("ALAC in %d PCM out %d\n", len, nOutBytes);
+
 	if (nOutBytes > (_nInputPacketBytes - kALACMaxEscapeHeaderBytes))
 		LOG("CTranscoder::Write() assertion failed\n");
 
@@ -128,9 +130,41 @@ bool CTranscoder::Write(unsigned char* pAlac, int len)
 	}
 	else
 	{
+		if (nMp3Bytes > 0)
+			StreamingServer::GetStreamingServer()->AddStreamData(_streamId, _pMp3Buffer, nMp3Bytes);
 		//fwrite(_pMp3Buffer, 1, nMp3Bytes, fMp3File);
-		StreamingServer::GetStreamingServer()->AddStreamData(_streamId, _pMp3Buffer, nMp3Bytes);
 	}
 
 	return status >= 0;
+}
+
+bool CTranscoder::WriteSilence(int nPackets)
+{
+	const int OutFrames = 352;
+	const int PcmBytes = OutFrames * 2 * 2; // frames * channels * bytes per sample
+	unsigned char pcmBuff[PcmBytes];
+
+	memset(pcmBuff, 0, PcmBytes);
+
+	for (int i = 0; i < nPackets; i++)
+	{
+
+		int nMp3Bytes = lame_encode_buffer_interleaved(_pLameGlobalFlags, (short*)pcmBuff, PcmBytes >> 2, _pMp3Buffer, _nMp3Buffer);
+
+		if (nMp3Bytes > _nMp3Buffer)
+		{
+			LOG("CTranscoder::Write() assertion failed\n");
+		}
+
+		if (nMp3Bytes < 0)
+		{
+			LOG("Error: lame_encode_buffer() failed\n");
+		}
+		else
+		{
+			if (nMp3Bytes > 0)
+				StreamingServer::GetStreamingServer()->AddStreamData(_streamId, _pMp3Buffer, nMp3Bytes);
+		}
+	}
+	return true;
 }

@@ -47,6 +47,18 @@ void StatsCollector::AddMissedPackets(int nPackets)
 	_stats.missedPackets += nPackets;
 }
 
+void StatsCollector::AddTxBytes(int nBytes)
+{
+	std::lock_guard<std::mutex> lock(_statsMutex);
+	_stats.txBytes += nBytes;
+}
+
+void StatsCollector::TxQueueLen(int len)
+{
+	std::lock_guard<std::mutex> lock(_statsMutex);
+	_stats.txQueueLen = len;
+}
+
 StatsCollector::Stats StatsCollector::GetandReset()
 {
 	std::lock_guard<std::mutex> lock(_statsMutex);

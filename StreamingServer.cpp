@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "StreamingServer.h"
+#include "StatsCollector.h"
 
 #include <sstream>
 #include <mutex>
@@ -54,6 +55,16 @@ StreamingServer::~StreamingServer()
 
 	_streamMap.clear();
 #endif
+
+	{ // scope for lock
+		std::lock_guard<std::mutex> lock(_streamCacheMutex);
+
+		for (auto it = _streamCacheMap.begin(); it != _streamCacheMap.end(); ++it)
+			delete it->second;
+
+		_streamCacheMap.clear();
+	}
+
 }
 
 void StreamingServer::CreateStream(int streamId)
@@ -174,9 +185,28 @@ LOG("StreamingServer sending response to listen\n");
 					std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
 				if (duration >= TimeOut)
+				{
 					LOG("StreamingServer::OnRequest() Error: timeout waiting for response to be sent\n");
-				else
-					static_cast<StreamingServerConnection*>(&connection)->_sendAudio = true;
+				}
+				else // copy any data from the cache and signal that we can now send audio
+				{
+					StreamingServerConnection* pConn = static_cast<StreamingServerConnection*>(&connection);
+					{ // scope for stream cache lock
+						std::lock_guard<std::mutex> lock(_streamCacheMutex);
+						if (_streamCacheMap.find(streamId) != _streamCacheMap.end())
+						{
+							LOG("Transmitting %d cached buffers\n", _streamCacheMap[streamId]->_bufferList.size());
+							while (_streamCacheMap[streamId]->_bufferList.size() > 0)
+							{
+								StreamBuffer* pBuff = _streamCacheMap[streamId]->_bufferList.front();
+								_streamCacheMap[streamId]->_bufferList.pop_front();
+								pConn->TransmitStreamData(pBuff->_pData, pBuff->_len);
+								delete pBuff;
+							}
+						}
+					}
+					pConn->_sendAudio = true;
+				}
 			}
 		}
 	}
@@ -186,7 +216,63 @@ LOG("StreamingServer sending response to listen\n");
 	}
 }
 
+void StreamingServer::TransmitCache()
+{
+}
+
 // called by audio provider
+
+//void StreamingServer::AddStreamData(int streamId, unsigned char* pData, int len)
+//{
+//	/* Don't use the Stream object, instead handle in the StreamingServerConnection
+//	std::lock_guard<std::mutex> lock(_streamMapMutex);
+//
+//	// keep the latency short, don't add stream data if the stream doesn't exist
+//	if ((_streamMap.find(streamId)) == _streamMap.end())
+//		return;
+//
+//	_streamMap[streamId]->AddData(pData, len);
+//	*/
+//
+//	std::lock_guard<std::mutex> lock(_connectionListMutex);
+//
+//	for (auto it = _connectionList.begin(); it != _connectionList.end(); ++it)
+//	{
+//		StreamingServerConnection* pConn = dynamic_cast<StreamingServerConnection*>(*it);
+//		if (pConn->_streamIdRequested == streamId && pConn->_sendAudio)
+//			pConn->TransmitStreamData(pData, len);
+//	}
+//}
+
+void StreamingServer::CacheData(int streamId, unsigned char* pData, int len)
+{
+	std::lock_guard<std::mutex> lock(_streamCacheMutex);
+
+	if (_streamCacheMap.find(streamId) != _streamCacheMap.end())
+	{
+		long int now = GetTickCount();
+
+		// prune any old buffers
+
+		StreamCache* pCache = _streamCacheMap[streamId];
+		bool pruned = false;
+		while (pCache->_bufferList.size() > 0 && now - pCache->_bufferList.front()->_time > 10000)
+		{
+			delete pCache->_bufferList.front();
+			pCache->_bufferList.pop_front();
+			pruned = true;
+		}
+		
+		if (pruned)
+			pCache->_lastPrune;
+	}
+	else
+	{
+		_streamCacheMap[streamId] = new StreamCache();
+	}
+	_streamCacheMap[streamId]->AddData(pData, len);
+}
+
 void StreamingServer::AddStreamData(int streamId, unsigned char* pData, int len)
 {
 	/* Don't use the Stream object, instead handle in the StreamingServerConnection
@@ -194,20 +280,31 @@ void StreamingServer::AddStreamData(int streamId, unsigned char* pData, int len)
 
 	// keep the latency short, don't add stream data if the stream doesn't exist
 	if ((_streamMap.find(streamId)) == _streamMap.end())
-		return;
+	return;
 
 	_streamMap[streamId]->AddData(pData, len);
 	*/
 
 	std::lock_guard<std::mutex> lock(_connectionListMutex);
+	bool activeConnection = false;
 
 	for (auto it = _connectionList.begin(); it != _connectionList.end(); ++it)
 	{
 		StreamingServerConnection* pConn = dynamic_cast<StreamingServerConnection*>(*it);
 		if (pConn->_streamIdRequested == streamId && pConn->_sendAudio)
+		{
 			pConn->TransmitStreamData(pData, len);
+			activeConnection = true;
+		}
+	}
+
+	// if there's no connection then cache the data
+	if (!activeConnection)
+	{
+		CacheData(streamId, pData, len);
 	}
 }
+
 
 /*
 // called from a StreamingServerStream instance
@@ -332,6 +429,8 @@ void StreamingServerConnection::TransmitStreamData(unsigned char* pData, int len
 
 	if (len > 0)
 	{
+		StatsCollector::GetInstance()->AddTxBytes(len);
+		StatsCollector::GetInstance()->TxQueueLen(TransmitBufferEntries());
 		Transmit((char*)pData, len);
 		_metaCount += len;
 	}
