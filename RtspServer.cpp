@@ -622,6 +622,7 @@ bool RtspServerConnection::SendUdpPacket(IN_ADDR* pAddr, int port, unsigned char
 	return sendto(sock, (char*)pData, len, 0, (sockaddr*)&sa, sizeof sa) >= 0;
 }
 
+/*
 bool RtspServerConnection::RequestRetransmit(unsigned short seq, unsigned short missedSeq, unsigned short nMissed)
 {
 	// RTP retransmit packet
@@ -654,6 +655,43 @@ bool RtspServerConnection::RequestRetransmit(unsigned short seq, unsigned short 
 
 	packet[10] = nMissed >> 8;
 	packet[11] = nMissed & 0xff;
+
+	return SendUdpPacket(&_remoteAddr.sin_addr, _txControlPort, packet, RetransmitReqLen);
+}
+*/
+
+bool RtspServerConnection::RequestRetransmit(unsigned short seq, unsigned short missedSeq, unsigned short nMissed)
+{
+	// RTP retransmit packet
+	// 0x80 // version etc
+	// 0xd5 // retransmit request (0x80 marker always set)
+	// 0x0000+.. // seq
+	// 0x12345678 timestamp
+	// 0xNNNN // missed packet seq
+	// 0xNNNN // num missed packets
+
+	const int RetransmitReqLen = 8;
+	unsigned char packet[RetransmitReqLen] =
+	{ 0x80, 0xd5, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 };
+
+	// sequence
+
+	packet[2] = seq >> 8;
+	packet[3] = seq & 0xff;
+
+	// timestamp
+
+	// ???? does it matter?
+
+	// missed seq
+
+	packet[4] = missedSeq >> 8;
+	packet[5] = missedSeq & 0xff;
+
+	// number of missed packets
+
+	packet[6] = nMissed >> 8;
+	packet[7] = nMissed & 0xff;
 
 	return SendUdpPacket(&_remoteAddr.sin_addr, _txControlPort, packet, RetransmitReqLen);
 }
