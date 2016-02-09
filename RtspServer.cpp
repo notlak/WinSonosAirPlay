@@ -102,6 +102,13 @@ bool RtspServer::LoadAirPortExpressKey()
 
 void RtspServer::OnRequest(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	//LOG("Request %s\n", request.type.c_str());
+	//for (auto it = request.headerFieldMap.begin(); it != request.headerFieldMap.end(); ++it)
+	//{
+	//	LOG("%s: %s\n", it->first.c_str(), it->second.c_str());
+	//	if (request.contentLength > 0) LOG("%s\n", request.pContent);
+	//}
+
 	if (request.type == "OPTIONS")
 		HandleOptions(connection, request);
 	else if (request.type == "ANNOUNCE")
@@ -286,7 +293,7 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 		pRtspServerConnection->_alacConfig.sampleRate = sampleRate;
 	}
 
-	// look for the name of the AIrPlay device
+	// look for the name of the AirPlay device
 
 	pos = content.find("i=");
 
@@ -316,6 +323,23 @@ void RtspServer::HandleSetup(NetworkServerConnection& connection, NetworkRequest
 
 	RtspServerConnection* pConn = static_cast<RtspServerConnection*>(&connection);
 
+	// get the control_port
+
+	pConn->_txControlPort = 0;
+
+	if (request.headerFieldMap.find("TRANSPORT") != request.headerFieldMap.end())
+	{
+		std::string transport = request.headerFieldMap["TRANSPORT"];
+		int index = transport.find("control_port=");
+		if (index != std::string::npos)
+		{
+			index += 13;
+			pConn->_txControlPort = atoi(transport.substr(index).c_str());
+		}
+	}
+
+
+
 	pConn->_pAudioSocket = new CUdpSocket();
 	pConn->_pControlSocket = new CUdpSocket();
 	pConn->_pTimingSocket = new CUdpSocket();
@@ -333,6 +357,7 @@ LOG("Timing socket init\n");
 	}
 	else
 	{
+
 		NetworkResponse resp("RTSP/1.0", 200, "OK");
 		resp.AddHeaderField("Server", "AirTunes/105.1");
 		resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
@@ -578,8 +603,68 @@ bool RtspServerConnection::Close()
 	return NetworkServerConnection::Close();
 }
 
+bool RtspServerConnection::SendUdpPacket(IN_ADDR* pAddr, int port, unsigned char* pData, int len)
+{
+	SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+
+	if (sock == INVALID_SOCKET)
+	{
+		LOG("SendUdpPacket() error creating socket");
+		return false;
+	}
+
+	SOCKADDR_IN sa;
+	memset(&sa, 0, sizeof(sa));
+	sa.sin_family = AF_INET;
+	sa.sin_port = htons(port);
+	memcpy(&sa.sin_addr, pAddr, sizeof sa.sin_addr);
+
+	return sendto(sock, (char*)pData, len, 0, (sockaddr*)&sa, sizeof sa) >= 0;
+}
+
+bool RtspServerConnection::RequestRetransmit(unsigned short seq, unsigned short missedSeq, unsigned short nMissed)
+{
+	// RTP retransmit packet
+	// 0x80 // version etc
+	// 0xd5 // retransmit request (0x80 marker always set)
+	// 0x0000+.. // seq
+	// 0x12345678 timestamp
+	// 0xNNNN // missed packet seq
+	// 0xNNNN // num missed packets
+
+	const int RetransmitReqLen = 12;
+	unsigned char packet[RetransmitReqLen] =
+	{ 0x80, 0xd5, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+	// sequence
+
+	packet[2] = seq >> 8;
+	packet[3] = seq & 0xff;
+
+	// timestamp
+
+	// ???? does it matter?
+
+	// missed seq
+
+	packet[8] = missedSeq >> 8;
+	packet[9] = missedSeq & 0xff;
+
+	// number of missed packets
+
+	packet[10] = nMissed >> 8;
+	packet[11] = nMissed & 0xff;
+
+	return SendUdpPacket(&_remoteAddr.sin_addr, _txControlPort, packet, RetransmitReqLen);
+}
+
+
+
 void RtspServerConnection::AudioThread()
 {
+	static int TestedRetransmit = 0;
+	static int RetransmitSeq = 0;
+
 	LOG("AudioThread() running stream %d...\n", _streamId);
 
 	const int BufferSize = 4096;
@@ -604,6 +689,12 @@ void RtspServerConnection::AudioThread()
 			//if (lastSeq > 0 && seq - lastSeq != 1)
 				//LOG("AudioThread() missing sequence %u -> %u\n", lastSeq, seq);
 
+			if (!TestedRetransmit)
+			{
+				RequestRetransmit(RetransmitSeq, seq, 1);
+				TestedRetransmit = true;
+			}
+
 			if (lastSeq > 0 && seq - lastSeq != 1 && seq > lastSeq)
 			{
 				pStats->AddMissedPackets(seq - lastSeq - 1);
@@ -621,8 +712,11 @@ void RtspServerConnection::AudioThread()
 		}
 
 		nBytes = _pControlSocket->Read(buffer, BufferSize);
-		//if (nBytes > 0)
-		//LOG("Received %d bytes from Control port\n", nBytes);
+		if (nBytes > 0)
+		{
+			LOG("Received %d bytes from Control port type:%d seq:%d\n", 
+				nBytes, buffer[1] & 0x7f, buffer[2] << 8 | buffer[3]);
+		}
 
 		nBytes = _pTimingSocket->Read(buffer, BufferSize);
 		//if (nBytes > 0)

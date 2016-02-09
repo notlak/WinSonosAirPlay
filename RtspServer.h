@@ -22,6 +22,8 @@ public:
 
 	void AudioThread();
 	bool DecryptAudio(unsigned char* pEncBytes, int len, unsigned short& seq);
+	bool RequestRetransmit(unsigned short seq, unsigned short missedSeq, unsigned short nMissed);
+	bool SendUdpPacket(IN_ADDR* pAddr, int port, unsigned char* pData, int len);
 
 	unsigned char _aesKey[16]; // 128 bit AES CBC key for audio decrypt
 	unsigned char _aesIv[16];
@@ -40,6 +42,7 @@ public:
 	CTranscoder _transcoder;
 
 	int _streamId;
+	int _txControlPort; // UDP port on apple device to send retransmit requests
 };
 
 class RtspServer : public NetworkServer<RtspServerConnection>
