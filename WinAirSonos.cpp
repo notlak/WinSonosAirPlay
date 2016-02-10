@@ -374,8 +374,8 @@ int main()
 		{
 			StatsCollector::Stats s = StatsCollector::GetInstance()->GetandReset();
 
-			LOG("STATS rxPackets:%d rxBytes:%d missedPackets:%d txBytes:%d txQueue:%d\n",
-				s.rxPackets, s.rxBytes, s.missedPackets, s.txBytes, s.txQueueLen);
+			LOG("STATS rxPackets:%d rxBytes:%d missedPackets:%d txBytes:%d txQueue:%d reTxReqs:%d reTxResps:%d reTxTimeouts:%d\n",
+				s.rxPackets, s.rxBytes, s.missedPackets, s.txBytes, s.txQueueLen, s.retxReqs, s.retxResps, s.retxTimeouts);
 
 			lastStatsOutput = now;
 		}

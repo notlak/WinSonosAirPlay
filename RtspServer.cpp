@@ -102,12 +102,13 @@ bool RtspServer::LoadAirPortExpressKey()
 
 void RtspServer::OnRequest(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	//LOG("Request %s\n", request.type.c_str());
-	//for (auto it = request.headerFieldMap.begin(); it != request.headerFieldMap.end(); ++it)
-	//{
-	//	LOG("%s: %s\n", it->first.c_str(), it->second.c_str());
-	//	if (request.contentLength > 0) LOG("%s\n", request.pContent);
-	//}
+	/*LOG("Request %s\n", request.type.c_str());
+	for (auto it = request.headerFieldMap.begin(); it != request.headerFieldMap.end(); ++it)
+	{
+		LOG("%s: %s\n", it->first.c_str(), it->second.c_str());
+	}
+	if (request.contentLength > 0) LOG("%s\n", request.pContent);
+	*/
 
 	if (request.type == "OPTIONS")
 		HandleOptions(connection, request);
@@ -622,44 +623,6 @@ bool RtspServerConnection::SendUdpPacket(IN_ADDR* pAddr, int port, unsigned char
 	return sendto(sock, (char*)pData, len, 0, (sockaddr*)&sa, sizeof sa) >= 0;
 }
 
-/*
-bool RtspServerConnection::RequestRetransmit(unsigned short seq, unsigned short missedSeq, unsigned short nMissed)
-{
-	// RTP retransmit packet
-	// 0x80 // version etc
-	// 0xd5 // retransmit request (0x80 marker always set)
-	// 0x0000+.. // seq
-	// 0x12345678 timestamp
-	// 0xNNNN // missed packet seq
-	// 0xNNNN // num missed packets
-
-	const int RetransmitReqLen = 12;
-	unsigned char packet[RetransmitReqLen] =
-	{ 0x80, 0xd5, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
-	// sequence
-
-	packet[2] = seq >> 8;
-	packet[3] = seq & 0xff;
-
-	// timestamp
-
-	// ???? does it matter?
-
-	// missed seq
-
-	packet[8] = missedSeq >> 8;
-	packet[9] = missedSeq & 0xff;
-
-	// number of missed packets
-
-	packet[10] = nMissed >> 8;
-	packet[11] = nMissed & 0xff;
-
-	return SendUdpPacket(&_remoteAddr.sin_addr, _txControlPort, packet, RetransmitReqLen);
-}
-*/
-
 bool RtspServerConnection::RequestRetransmit(unsigned short seq, unsigned short missedSeq, unsigned short nMissed)
 {
 	// RTP retransmit packet
@@ -697,11 +660,9 @@ bool RtspServerConnection::RequestRetransmit(unsigned short seq, unsigned short 
 }
 
 
-
 void RtspServerConnection::AudioThread()
 {
-	static int TestedRetransmit = 0;
-	static int RetransmitSeq = 0;
+	int retransmitSeq = 1;
 
 	LOG("AudioThread() running stream %d...\n", _streamId);
 
@@ -710,7 +671,7 @@ void RtspServerConnection::AudioThread()
 
 	_transcoder.Init(&_alacConfig, _streamId); // streamId hardcoded to 1
 
-	unsigned short lastSeq = 0;
+	int lastSeq = -1;
 
 	StatsCollector* pStats = StatsCollector::GetInstance();
 
@@ -719,41 +680,79 @@ void RtspServerConnection::AudioThread()
 		int nBytes;
 
 		while ((nBytes = _pAudioSocket->Read(buffer, BufferSize)) > 0)
-		//if (nBytes > 0) // priority to audio data
 		{
-			unsigned short seq = 0;
+			int seq = 0;
 			DecryptAudio((unsigned char*)buffer, nBytes, seq);
 
-			//if (lastSeq > 0 && seq - lastSeq != 1)
-				//LOG("AudioThread() missing sequence %u -> %u\n", lastSeq, seq);
-
-			if (!TestedRetransmit)
+			if ((buffer[1] & 0x7f) != 96)
 			{
-				RequestRetransmit(RetransmitSeq, seq, 1);
-				TestedRetransmit = true;
+				LOG("AudioThread() unexpected payload type");
+			}
+			else
+			{
+				if (lastSeq > -1 && seq > lastSeq && seq - lastSeq != 1)
+				{
+					int firstMissingSeq = (lastSeq + 1) % 65536;
+					int nMissing = seq - firstMissingSeq;
+
+					pStats->AddMissedPackets(nMissing);
+
+					// ask for the packets to be retransmitted
+					StatsCollector::GetInstance()->AddRetransmissionRequests(nMissing);
+					RequestRetransmit(retransmitSeq++, firstMissingSeq, nMissing);
+
+					// put placeholders in the audiobuffer
+					_audioPacketBuffer.AddEmptyPackets(firstMissingSeq, nMissing);
+
+					//_transcoder.WriteSilence(nMissing);
+				}
+
+				//_transcoder.Write((unsigned char*)buffer + 12, nBytes - 12);
+
+				_audioPacketBuffer.AddPacket(seq, (unsigned char*)buffer + 12, nBytes - 12);
+
+				lastSeq = seq;
+
+				pStats->AddRxPacket();
+				pStats->AddRxBytes(nBytes);
 			}
 
-			if (lastSeq > 0 && seq - lastSeq != 1 && seq > lastSeq)
+			AudioPacket* pPacket = nullptr;
+
+			while (pPacket = _audioPacketBuffer.GetNextPacket())
 			{
-				pStats->AddMissedPackets(seq - lastSeq - 1);
-				_transcoder.WriteSilence(seq - lastSeq - 1);
+				if (pPacket->_pData)
+				{
+					_transcoder.Write(pPacket->_pData, pPacket->_len);
+				}
+				else // timed out
+				{
+					StatsCollector::GetInstance()->AddRetransmissionTimeout();
+					_transcoder.WriteSilence(1);
+				}
+
+				delete pPacket;
 			}
-
-			_transcoder.Write((unsigned char*)buffer + 12, nBytes - 12);
-
-			lastSeq = seq;
-
-			pStats->AddRxPacket();
-			pStats->AddRxBytes(nBytes);
 
 			//LOG("Received %d bytes from Audio port Seq:%d\n", nBytes, seq);
 		}
 
 		nBytes = _pControlSocket->Read(buffer, BufferSize);
-		if (nBytes > 0)
+		if (nBytes > 0 && (buffer[1] & 0x7f) == 86)
 		{
-			LOG("Received %d bytes from Control port type:%d seq:%d\n", 
-				nBytes, buffer[1] & 0x7f, buffer[2] << 8 | buffer[3]);
+			// there will be a short 4 character header
+			// 0x80 0xd6 seqHi seqLo before the retransmitted packet
+
+			//LOG("Received %d bytes from Control port type:%d seq:%d\n", 
+				//nBytes, buffer[1] & 0x7f, buffer[2] << 8 | buffer[3]);
+
+			StatsCollector::GetInstance()->AddRetransmissionResponse();
+
+			int audioRtpLen = nBytes - 4;
+			unsigned char* pAudioRtp = (unsigned char*)buffer + 4;
+			unsigned short audioSeq = (pAudioRtp[2] << 8) + pAudioRtp[3];
+
+			_audioPacketBuffer.AddMissedPacket(audioSeq, pAudioRtp + 12, audioRtpLen - 12);
 		}
 
 		nBytes = _pTimingSocket->Read(buffer, BufferSize);
@@ -765,7 +764,7 @@ void RtspServerConnection::AudioThread()
 
 }
 
-bool RtspServerConnection::DecryptAudio(unsigned char* pEncBytes, int len, unsigned short& seq)
+bool RtspServerConnection::DecryptAudio(unsigned char* pEncBytes, int len, int& seq)
 {
 	const int HeaderSize = 12;
 

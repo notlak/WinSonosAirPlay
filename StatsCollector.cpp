@@ -59,6 +59,24 @@ void StatsCollector::TxQueueLen(int len)
 	_stats.txQueueLen = len;
 }
 
+void StatsCollector::AddRetransmissionRequests(int len)
+{
+	std::lock_guard<std::mutex> lock(_statsMutex);
+	_stats.retxReqs += len;
+}
+
+void StatsCollector::AddRetransmissionResponse()
+{
+	std::lock_guard<std::mutex> lock(_statsMutex);
+	_stats.retxResps++;
+}
+
+void StatsCollector::AddRetransmissionTimeout()
+{
+	std::lock_guard<std::mutex> lock(_statsMutex);
+	_stats.retxTimeouts++;
+}
+
 StatsCollector::Stats StatsCollector::GetandReset()
 {
 	std::lock_guard<std::mutex> lock(_statsMutex);

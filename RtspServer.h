@@ -11,6 +11,122 @@
 
 struct MetaData;
 
+class AudioPacket
+{
+public:
+	AudioPacket(unsigned short seq, unsigned char* pData, int len) : _seq(seq), _pData(nullptr), _len(len) 
+	{
+		_timeStamp = GetTickCount();
+
+		if (pData && len)
+		{
+			_pData = new unsigned char[len];
+			memcpy(_pData, pData, len);
+		}
+	}
+	~AudioPacket()
+	{
+		_len = 0;
+		delete[] _pData;
+		_pData = nullptr;
+	}
+
+	unsigned short _seq;
+	unsigned char* _pData; // if null then missed packet
+	int _len;
+	unsigned int _timeStamp; // time at which packet (should have been) received
+};
+
+class AudioPacketBuffer
+{
+public:
+	AudioPacketBuffer() {}
+	~AudioPacketBuffer() 
+	{
+		while (_packetList.size() > 0)
+		{
+			delete _packetList.front();
+			_packetList.pop_front();
+		}
+	}
+
+	void AddPacket(unsigned short seq, unsigned char* pData, int len)
+	{
+		_packetList.push_back(new AudioPacket(seq, pData, len));
+	}
+
+	void AddEmptyPackets(unsigned short seq, int count)
+	{
+		for (int i = 0; i < count; i++)
+			AddPacket(seq+i, nullptr, 0);
+	}
+
+	bool AddMissedPacket(unsigned short seq, unsigned char* pData, int len)
+	{
+		bool done = false;
+
+		for (auto it = _packetList.begin(); it != _packetList.end(); ++it)
+		{
+			AudioPacket* pPacket = *it;
+
+			if (pPacket->_seq == seq)
+			{
+				if (pPacket->_pData != nullptr)
+				{
+					LOG("AudioPacketBuffer::AddMissedPacket() error: body already exists");
+				}
+				else
+				{
+					pPacket->_pData = new unsigned char[len];
+					memcpy(pPacket->_pData, pData, len);
+					pPacket->_len = len;
+					done = true;
+				}
+				break;
+			}
+		}
+
+		if (!done)
+			LOG("Seq not found\n");
+
+		return done;
+	}
+
+	AudioPacket* GetNextPacket()
+	{		
+		if (_packetList.empty())
+			return nullptr;
+
+		AudioPacket* pPacket = _packetList.front();
+
+		if (pPacket->_pData)
+		{
+			pPacket = _packetList.front();
+			_packetList.pop_front();
+		}
+		else
+		{
+			if (GetTickCount() - pPacket->_timeStamp < 1000) // 1000ms timeout for now
+			{
+				pPacket = nullptr; // still waiting for missed packet retransmission
+			}
+			else // timed out, will have to pad with silence
+			{
+				_packetList.pop_front();
+			}
+		}
+
+		return pPacket;
+	}
+
+	bool NextPacketMissed()
+	{
+		return nullptr == _packetList.front()->_pData;
+	}
+
+	std::list<AudioPacket*> _packetList;
+};
+
 class RtspServerConnection : public NetworkServerConnection
 {
 public:
@@ -21,7 +137,7 @@ public:
 	virtual bool Close();
 
 	void AudioThread();
-	bool DecryptAudio(unsigned char* pEncBytes, int len, unsigned short& seq);
+	bool DecryptAudio(unsigned char* pEncBytes, int len, int& seq);
 	bool RequestRetransmit(unsigned short seq, unsigned short missedSeq, unsigned short nMissed);
 	bool SendUdpPacket(IN_ADDR* pAddr, int port, unsigned char* pData, int len);
 
@@ -43,6 +159,7 @@ public:
 
 	int _streamId;
 	int _txControlPort; // UDP port on apple device to send retransmit requests
+	AudioPacketBuffer _audioPacketBuffer;
 };
 
 class RtspServer : public NetworkServer<RtspServerConnection>
