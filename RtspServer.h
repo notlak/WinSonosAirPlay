@@ -64,10 +64,14 @@ public:
 	bool AddMissedPacket(unsigned short seq, unsigned char* pData, int len)
 	{
 		bool done = false;
+		int firstSeq = -1;
 
 		for (auto it = _packetList.begin(); it != _packetList.end(); ++it)
 		{
 			AudioPacket* pPacket = *it;
+
+			if (firstSeq < 0)
+				firstSeq = pPacket->_seq;
 
 			if (pPacket->_seq == seq)
 			{
@@ -86,8 +90,8 @@ public:
 			}
 		}
 
-		if (!done)
-			LOG("Seq not found\n");
+		//if (!done)
+			//LOG("Seq not found seq:%d first:%d\n", seq, firstSeq);
 
 		return done;
 	}

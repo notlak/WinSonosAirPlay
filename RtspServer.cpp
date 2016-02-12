@@ -663,6 +663,7 @@ bool RtspServerConnection::RequestRetransmit(unsigned short seq, unsigned short 
 void RtspServerConnection::AudioThread()
 {
 	int retransmitSeq = 1;
+	static int TestCount = 0;
 
 	LOG("AudioThread() running stream %d...\n", _streamId);
 
@@ -690,6 +691,23 @@ void RtspServerConnection::AudioThread()
 			}
 			else
 			{
+				/* test retransmissions!
+				TestCount++;
+				
+				if (TestCount % 3)
+				{
+					_audioPacketBuffer.AddPacket(seq, (unsigned char*)buffer + 12, nBytes - 12);
+					lastSeq = seq;
+				}
+				else
+				{
+					pStats->AddMissedPackets(1);
+					pStats->AddRetransmissionRequests(1);
+					_audioPacketBuffer.AddEmptyPackets(seq, 1);
+					RequestRetransmit(retransmitSeq++, seq, 1);
+				}
+				*/
+
 				if (lastSeq > -1 && seq > lastSeq && seq - lastSeq != 1)
 				{
 					int firstMissingSeq = (lastSeq + 1) % 65536;
@@ -698,7 +716,7 @@ void RtspServerConnection::AudioThread()
 					pStats->AddMissedPackets(nMissing);
 
 					// ask for the packets to be retransmitted
-					StatsCollector::GetInstance()->AddRetransmissionRequests(nMissing);
+					pStats->AddRetransmissionRequests(nMissing);
 					RequestRetransmit(retransmitSeq++, firstMissingSeq, nMissing);
 
 					// put placeholders in the audiobuffer
@@ -721,13 +739,13 @@ void RtspServerConnection::AudioThread()
 
 			while (pPacket = _audioPacketBuffer.GetNextPacket())
 			{
-				if (pPacket->_pData)
+				if (pPacket->_pData) // normal packet
 				{
 					_transcoder.Write(pPacket->_pData, pPacket->_len);
 				}
-				else // timed out
+				else // missed packet that timed out
 				{
-					StatsCollector::GetInstance()->AddRetransmissionTimeout();
+					pStats->AddRetransmissionTimeout();
 					_transcoder.WriteSilence(1);
 				}
 
@@ -737,24 +755,27 @@ void RtspServerConnection::AudioThread()
 			//LOG("Received %d bytes from Audio port Seq:%d\n", nBytes, seq);
 		}
 
-		nBytes = _pControlSocket->Read(buffer, BufferSize);
-		if (nBytes > 0 && (buffer[1] & 0x7f) == 86)
+		while ((nBytes = _pControlSocket->Read(buffer, BufferSize)) > 0)
 		{
-			// there will be a short 4 character header
-			// 0x80 0xd6 seqHi seqLo before the retransmitted packet
+			if ((buffer[1] & 0x7f) == 86) // Retransmission response
+			{
+				// there will be a short 4 character header
+				// 0x80 0xd6 seqHi seqLo before the retransmitted packet
 
-			//LOG("Received %d bytes from Control port type:%d seq:%d\n", 
-				//nBytes, buffer[1] & 0x7f, buffer[2] << 8 | buffer[3]);
+				//LOG("Received %d bytes from Control port type:%d seq:%d\n", 
+					//nBytes, buffer[1] & 0x7f, buffer[2] << 8 | buffer[3]);
 
-			StatsCollector::GetInstance()->AddRetransmissionResponse();
+				int audioRtpLen = nBytes - 4;
+				unsigned char* pAudioRtp = (unsigned char*)buffer + 4;
+				int audioSeq = 0;
 
-			int audioRtpLen = nBytes - 4;
-			unsigned char* pAudioRtp = (unsigned char*)buffer + 4;
-			unsigned short audioSeq = (pAudioRtp[2] << 8) + pAudioRtp[3];
-
-			_audioPacketBuffer.AddMissedPacket(audioSeq, pAudioRtp + 12, audioRtpLen - 12);
+				DecryptAudio(pAudioRtp, audioRtpLen, audioSeq);
+				_audioPacketBuffer.AddMissedPacket(audioSeq, pAudioRtp + 12, audioRtpLen - 12);
+				pStats->AddRetransmissionResponse();
+			}
 		}
 
+		// we don't do any time sync at the moment
 		nBytes = _pTimingSocket->Read(buffer, BufferSize);
 		//if (nBytes > 0)
 		//LOG("Received %d bytes from Timing port\n", nBytes);
