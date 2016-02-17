@@ -8,7 +8,7 @@
 #include <list>
 #include <mutex>
 
-#define NO_SONOS
+//#define NO_SONOS
 
 class SonosDevice
 {

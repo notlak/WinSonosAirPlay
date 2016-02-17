@@ -17,8 +17,11 @@ CUdpSocket::CUdpSocket()
 
 CUdpSocket::~CUdpSocket()
 {
-	if (_socketListening)
+	if (_socket > -1)
+	{
+		shutdown(_socket, SD_BOTH);
 		closesocket(_socket);
+	}
 }
 
 
