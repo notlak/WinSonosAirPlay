@@ -134,6 +134,16 @@ void CWinAirSonos::AdvertiseServer(std::string name, int port, unsigned char* pM
 	std::ostringstream s;
 	char hex[3];
 
+	// if we're already advertising a service with this name, stop it!
+
+	if (_sdRefMap.find(name) != _sdRefMap.end())
+	{
+		DNSServiceRefDeallocate(_sdRefMap[name]);
+		_sdRefMap.erase(name);
+	}
+
+	// we need to advertise <ASCII hex mac>@<sonos room> so sort out the mac bit
+
 	for (int i = 0; i < 8; i++)
 	{
 		sprintf(hex, "%02X", pMac[i]);
@@ -152,7 +162,6 @@ void CWinAirSonos::AdvertiseServer(std::string name, int port, unsigned char* pM
 		_sdRefMap[name] = sdRef;
 
 	LOG("Advertising %s on port %d\n", identifier.c_str(), port);
-
 }
 
 void CWinAirSonos::OnNewDevice(const SonosDevice& dev)
@@ -203,6 +212,7 @@ void CWinAirSonos::OnNewDevice(const SonosDevice& dev)
 	}
 	else
 	{
+		delete pAirPlayServer;
 		LOG("Failed to start RtspServer for %s\n", dev._name.c_str());
 	}
 }

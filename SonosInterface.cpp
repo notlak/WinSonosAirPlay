@@ -83,8 +83,6 @@ public:
 		bool gotUdn = false;
 		bool gotUrl = false;
 
-		//You should save pDevice so that it is accessible outside the scope of this method.
-
 		_bstr_t udn;
 		hr = pDevice->get_UniqueDeviceName(&udn.GetBSTR());
 
@@ -716,46 +714,58 @@ Connection: close
 		dev._udn = std::string("uuid:") + pElem->Attribute("uuid"); // 'uuid:' is not included in xml version but is in UPnP?
 		dev._name = pElem->GetText();
 
-		if (dev._name != "BOOST" && dev._name != "BRIDGE" && !IsDeviceInList(dev._udn.c_str()))
+		// ignore none-speaker devices
+		if (dev._name != "BOOST" && dev._name != "BRIDGE")
 		{
-			dev._group = pElem->Attribute("group");
-			dev._isCoordinator = strcmp(pElem->Attribute("coordinator"), "true") == 0;
-
-			ParseUrl(pElem->Attribute("location"), dev._address, dev._port, path);
-
-			_deviceList.push_back(dev);
-
-			// now add to group or create a new one
-
-			bool found = false;
-
-			for (std::list<SonosGroup>::iterator it = _groupList.begin(); it != _groupList.end() && !found; ++it)
+			if (!IsDeviceInList(dev._udn.c_str()))
 			{
-				if (dev._group == it->_name)
-				{
-					found = true;
+				dev._group = pElem->Attribute("group");
+				dev._isCoordinator = strcmp(pElem->Attribute("coordinator"), "true") == 0;
 
-					it->_members.push_back(dev._udn);
+				ParseUrl(pElem->Attribute("location"), dev._address, dev._port, path);
+
+				_deviceList.push_back(dev);
+
+				// now add to group or create a new one
+
+				bool found = false;
+
+				for (std::list<SonosGroup>::iterator it = _groupList.begin(); it != _groupList.end() && !found; ++it)
+				{
+					if (dev._group == it->_name)
+					{
+						found = true;
+
+						it->_members.push_back(dev._udn);
+
+						if (dev._isCoordinator)
+							it->_coordinator = dev._udn;
+					}
+				}
+
+				if (!found)
+				{
+					group._name = dev._group;
+					group._members.push_back(dev._udn);
 
 					if (dev._isCoordinator)
-						it->_coordinator = dev._udn;
+						group._coordinator = dev._udn;
+
+					_groupList.push_back(group);
+
+				}
+
+
+				if (_pClient)
+				{
+					// let the client know about a new device
+					if (dev._isCoordinator)
+						_pClient->OnNewDevice(dev);
 				}
 			}
-
-			if (!found)
+			else // device in list - check for changes
 			{
-				group._name = dev._group;
-				group._members.push_back(dev._udn);
 				
-				if (dev._isCoordinator)
-					group._coordinator = dev._udn;
-
-				_groupList.push_back(group);
-
-				// let the client know about a new device
-
-				if (_pClient && dev._isCoordinator)
-					_pClient->OnNewDevice(dev);
 			}
 
 		}
