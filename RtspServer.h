@@ -164,6 +164,8 @@ public:
 	int _streamId;
 	int _txControlPort; // UDP port on apple device to send retransmit requests
 	AudioPacketBuffer _audioPacketBuffer;
+	SOCKADDR_IN _airplayControlAddr;
+	SOCKET _reTxReqSocket;
 };
 
 class RtspServer : public NetworkServer<RtspServerConnection>

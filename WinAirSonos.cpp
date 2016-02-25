@@ -384,7 +384,7 @@ int main()
 		{
 			StatsCollector::Stats s = StatsCollector::GetInstance()->GetandReset();
 
-			LOG("STATS rxPackets:%d rxBytes:%d missedPackets:%d txBytes:%d txQueue:%d reTxReqs:%d reTxResps:%d reTxTimeouts:%d\n",
+			LOG("STATS rxPkts:%d rxBytes:%d missedPkts:%d txBytes:%d txQ:%d reqs:%d resps:%d timeouts:%d\n",
 				s.rxPackets, s.rxBytes, s.missedPackets, s.txBytes, s.txQueueLen, s.retxReqs, s.retxResps, s.retxTimeouts);
 
 			lastStatsOutput = now;

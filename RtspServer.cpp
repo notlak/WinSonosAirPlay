@@ -305,6 +305,31 @@ void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequ
 		pRtspServerConnection->_airplayDevice = content.substr(pos, len);
 	}
 
+	// tell the Sonos speaker to start playing
+
+	pRtspServerConnection->_streamId = _sonosStreamId;
+
+	// tell the sonos to start playing the stream
+
+	std::ostringstream uri;
+
+	uri << "x-rincon-mp3radio://" << connection.GetIpAddress() << ":" << StreamingServer::GetPort() <<
+		"/" << pRtspServerConnection->_streamId << "/listen"; // /listen.m3u - seems an unnecessary step
+
+											  //uri << "http://us1.internet-radio.com:8180/listen.pls&t=.m3u";
+											  //uri << "x-rincon-mp3radio://http://www.voicerss.org/controls/speech.ashx?hl=en-gb&src=hello%20hazel%20you%20idiot&c=mp3&rnd=0.8578293843928012";
+
+	std::string metadata("AirPlay");
+
+	if (!pRtspServerConnection->_airplayDevice.empty())
+		metadata = pRtspServerConnection->_airplayDevice;
+
+	//SonosInterface::GetInstance()->SetAvTransportUri(_sonosUdn.c_str(), uri.str().c_str(), metadata.c_str());
+	//SonosInterface::GetInstance()->Play(_sonosUdn.c_str());
+
+	SonosInterface::GetInstance()->PlayUri(_sonosUdn.c_str(), uri.str().c_str(), metadata.c_str());
+
+
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Server", "AirTunes/105.1");
 	resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
@@ -339,7 +364,14 @@ void RtspServer::HandleSetup(NetworkServerConnection& connection, NetworkRequest
 		}
 	}
 
+	if (pConn->_pAudioSocket)
+		delete pConn->_pAudioSocket;
 
+	if (pConn->_pControlSocket)
+		delete pConn->_pControlSocket;
+
+	if (pConn->_pTimingSocket)
+		delete pConn->_pTimingSocket;
 
 	pConn->_pAudioSocket = new CUdpSocket();
 	pConn->_pControlSocket = new CUdpSocket();
@@ -355,9 +387,16 @@ LOG("Timing socket init\n");
 	if (pConn->_pAudioSocket->GetPort() < 0 || pConn->_pControlSocket->GetPort() < 0 || pConn->_pTimingSocket->GetPort() < 0)
 	{
 		LOG("Error: unable to create UDP sockets\n");
+
+		NetworkResponse resp("RTSP/1.0", 500, "Internal Server Error");
+		resp.AddHeaderField("Server", "AirTunes/105.1");
+		resp.AddHeaderField("CSeq", request.headerFieldMap["CSEQ"].c_str());
+		connection.SendResponse(resp);
 	}
 	else
 	{
+		LOG("UDP ports: %d %d %d\n",
+			pConn->_pAudioSocket->GetPort(), pConn->_pControlSocket->GetPort(), pConn->_pTimingSocket->GetPort());
 
 		NetworkResponse resp("RTSP/1.0", 200, "OK");
 		resp.AddHeaderField("Server", "AirTunes/105.1");
@@ -375,32 +414,7 @@ LOG("Timing socket init\n");
 
 		connection.SendResponse(resp);
 
-		// get a streamId
-		//pConn->_streamId = StreamingServer::GetStreamId();
-
-		// actually one will already have been associated to this server
-
-		pConn->_streamId = _sonosStreamId;
-
-		// tell the sonos to start playing the stream
-
-		std::ostringstream uri;
 		
-		uri << "x-rincon-mp3radio://" << connection.GetIpAddress() << ":" << StreamingServer::GetPort() <<
-			"/" << pConn->_streamId << "/listen"; // /listen.m3u - seems an unnecessary step
-			
-		//uri << "http://us1.internet-radio.com:8180/listen.pls&t=.m3u";
-		//uri << "x-rincon-mp3radio://http://www.voicerss.org/controls/speech.ashx?hl=en-gb&src=hello%20hazel%20you%20idiot&c=mp3&rnd=0.8578293843928012";
-
-		std::string metadata("AirPlay");
-
-		if (!pConn->_airplayDevice.empty())
-			metadata = pConn->_airplayDevice;
-
-		//SonosInterface::GetInstance()->SetAvTransportUri(_sonosUdn.c_str(), uri.str().c_str(), metadata.c_str());
-		//SonosInterface::GetInstance()->Play(_sonosUdn.c_str());
-
-		SonosInterface::GetInstance()->PlayUri(_sonosUdn.c_str(), uri.str().c_str(), metadata.c_str());
 
 		pConn->_pAudioThread = new std::thread(&RtspServerConnection::AudioThread, pConn);
 	}
@@ -571,9 +585,10 @@ RtspServerConnection::RtspServerConnection(NetworkServerInterface* pServerInterf
 	_pControlSocket(nullptr),
 	_pTimingSocket(nullptr),
 	_pAudioThread(nullptr),
-	_stopAudioThread(false)
+	_stopAudioThread(false),
+	_reTxReqSocket(INVALID_SOCKET)
 {
-
+	memset(&_reTxReqSocket, 0, sizeof _reTxReqSocket);
 }
 
 RtspServerConnection::~RtspServerConnection()
@@ -620,7 +635,11 @@ bool RtspServerConnection::SendUdpPacket(IN_ADDR* pAddr, int port, unsigned char
 	sa.sin_port = htons(port);
 	memcpy(&sa.sin_addr, pAddr, sizeof sa.sin_addr);
 
-	return sendto(sock, (char*)pData, len, 0, (sockaddr*)&sa, sizeof sa) >= 0;
+	int ret = sendto(sock, (char*)pData, len, 0, (sockaddr*)&sa, sizeof sa);
+
+	closesocket(sock);
+
+	return ret != SOCKET_ERROR;
 }
 
 bool RtspServerConnection::RequestRetransmit(unsigned short seq, unsigned short missedSeq, unsigned short nMissed)
@@ -656,7 +675,9 @@ bool RtspServerConnection::RequestRetransmit(unsigned short seq, unsigned short 
 	packet[6] = nMissed >> 8;
 	packet[7] = nMissed & 0xff;
 
-	return SendUdpPacket(&_remoteAddr.sin_addr, _txControlPort, packet, RetransmitReqLen);
+	return sendto(_reTxReqSocket, (char*)packet, RetransmitReqLen, 0, (sockaddr*)&_airplayControlAddr, sizeof _airplayControlAddr) != SOCKET_ERROR;
+
+	//return SendUdpPacket(&_remoteAddr.sin_addr, _txControlPort, packet, RetransmitReqLen);
 }
 
 
@@ -673,6 +694,20 @@ void RtspServerConnection::AudioThread()
 	_transcoder.Init(&_alacConfig, _streamId); // streamId hardcoded to 1
 
 	int lastSeq = -1;
+
+	// setup the socket and address for retransmits
+
+	_reTxReqSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+
+	if (_reTxReqSocket == INVALID_SOCKET)
+	{
+		LOG("AudioThread() error creating retransmit request socket");
+		return;
+	}
+
+	_airplayControlAddr.sin_family = AF_INET;
+	_airplayControlAddr.sin_port = htons(_txControlPort);
+	memcpy(&_airplayControlAddr.sin_addr, &_remoteAddr.sin_addr, sizeof _airplayControlAddr.sin_addr);
 
 	StatsCollector* pStats = StatsCollector::GetInstance();
 
@@ -782,6 +817,8 @@ void RtspServerConnection::AudioThread()
 
 		Sleep(10);
 	}
+
+	closesocket(_reTxReqSocket);
 
 }
 

@@ -19,6 +19,7 @@ CUdpSocket::~CUdpSocket()
 {
 	if (_socket > -1)
 	{
+		LOG("Closing UDP port %d\n", _port);
 		shutdown(_socket, SD_BOTH);
 		closesocket(_socket);
 	}
@@ -27,11 +28,11 @@ CUdpSocket::~CUdpSocket()
 
 bool CUdpSocket::Initialise(int port)
 {
+	const int MinPort = 49152;
+	const int MaxPort = 65535;
+
 	if (port == -1) // generate random port
 	{
-		const int MinPort = 49152;
-		const int MaxPort = 65500;
-
 		LARGE_INTEGER perfCount;
 		QueryPerformanceCounter(&perfCount);
 
@@ -59,7 +60,9 @@ bool CUdpSocket::Initialise(int port)
 		if (bind(_socket, (struct sockaddr*)&addr, sizeof(addr)) < 0)
 		{
 			LOG("Failed to create UDP socket on port: %d\n", port);
-			port = (port + 1) % 65536;
+			port = port + 1;
+			if (port > 65535) 
+				port = MinPort;
 		}
 		else
 		{
