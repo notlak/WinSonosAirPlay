@@ -217,9 +217,105 @@ void CWinAirSonos::OnNewDevice(const SonosDevice& dev)
 	}
 }
 
+void CWinAirSonos::OnDeviceAddressChanged(const SonosDevice& dev)
+{
+	LOG("Sonos device '%s' address changed to %s\n", dev._name.c_str(), dev._address.c_str());
+
+	// There should be nothing to do:
+	// we can leave the existing RTSP server and mDNS advert alone
+	// the RTSP server refers to SONOS devices by via udn
+	// the SonosInterface keeps the addresses up to date
+}
+
+void CWinAirSonos::OnDeviceNameChanged(const SonosDevice& dev, const std::string& oldName)
+{
+	LOG("Sonos device name changed %s -> %s\n", oldName.c_str(), dev._name.c_str());
+
+	// we need to stop advertising the current name
+
+	for (auto it = _sdRefMap.begin(); it != _sdRefMap.end(); ++it)
+	{
+		if (it->first == oldName)
+		{
+			DNSServiceRefDeallocate(it->second);
+			_sdRefMap.erase(it);
+			break;
+		}
+	}
+
+	int port = -1;
+
+	// update name of RTSP record in the map and get port
+	std::lock_guard<std::mutex> lock(_airplayServerMapMutex);
+
+	auto it = _airplayServerMap.find(oldName);
+	if (it != _airplayServerMap.end())
+	{
+		port = (it->second)->GetPort();
+		// add new entry in the map with same RTSP port
+		_airplayServerMap[dev._name] = it->second;
+		// delete the entry with the old name
+		_airplayServerMap.erase(it);
+	}
+
+	// start advertising the new name
+	if (port > -1)
+	{
+		unsigned char mac[8];
+		GenerateMac(dev._name, mac);
+		AdvertiseServer(dev._name, port, mac);
+	}
+	else
+	{
+		LOG("Error: no unable to get RTSP server port for %s\n", dev._name.c_str());
+	}
+}
+
+void CWinAirSonos::OnDeviceCoordinatorStatusChanged(const SonosDevice& dev)
+{
+	// if _isCoordinator has gone false -> true
+	//     start a new server and advertise it
+	// if _isCoordinator has gone true-> false
+	//     stop server and stop advertising it
+
+	if (dev._isCoordinator)
+	{
+		OnNewDevice(dev);
+	}
+	else
+	{
+		OnDeviceRemoved(dev);
+	}
+
+}
+
 void CWinAirSonos::OnDeviceRemoved(const SonosDevice& dev)
 {
+	// stop advertising
+	{
+		std::lock_guard<std::mutex> lock(_sdRefMapMutex);
 
+		auto it = _sdRefMap.find(dev._name);
+
+		if (it != _sdRefMap.end())
+		{
+			DNSServiceRefDeallocate(it->second);
+			_sdRefMap.erase(it);
+		}
+	}
+
+	// kill the server
+	{
+		std::lock_guard<std::mutex> lock(_airplayServerMapMutex);
+
+		auto it = _airplayServerMap.find(dev._name);
+
+		if (it != _airplayServerMap.end())
+		{
+			delete it->second;
+			_airplayServerMap.erase(it);
+		}
+	}
 }
 
 void CWinAirSonos::ReadvertiseServers()

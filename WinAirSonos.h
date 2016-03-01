@@ -7,6 +7,7 @@
 #include "SonosInterface.h"
 #include <map>
 #include <string>
+#include <mutex>
 
 // mdns/bonjour stuff
 #include "c:\program files\Bonjour SDK\include\dns_sd.h"
@@ -31,6 +32,9 @@ public:
 
 	virtual void OnNewDevice(const SonosDevice& dev);
 	virtual void OnDeviceRemoved(const SonosDevice& dev);
+	virtual void OnDeviceAddressChanged(const SonosDevice& dev);
+	virtual void OnDeviceNameChanged(const SonosDevice& dev, const std::string& oldName);
+	virtual void OnDeviceCoordinatorStatusChanged(const SonosDevice& dev);
 
 protected:
 
@@ -40,6 +44,9 @@ protected:
 
 	std::map<std::string, RtspServer*> _airplayServerMap;
 	std::map<std::string, DNSServiceRef> _sdRefMap;
+
+	std::mutex _sdRefMapMutex;
+	std::mutex _airplayServerMapMutex;
 
 	TXTRecordRef _txtRef; //  for mDNS advertiser
 	static const int TXTBuffLen = 1024;

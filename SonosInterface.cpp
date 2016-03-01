@@ -763,9 +763,9 @@ Connection: close
 						_pClient->OnNewDevice(dev);
 				}
 			}
-			else // device in list - check for changes
+			else // device in list - update our record and notify client if necessary
 			{
-				
+				UpdateDeviceRecord(dev);
 			}
 
 		}
@@ -779,6 +779,38 @@ Connection: close
 	return true;
 }
 
+void SonosInterface::UpdateDeviceRecord(const SonosDevice& dev)
+{
+	for (auto it = _deviceList.begin(); it != _deviceList.end(); ++it)
+	{
+		if (dev._udn == it->_udn)
+		{
+			if (dev._address != it->_address)
+			{
+				it->_address = dev._address;
+				if (_pClient)
+					_pClient->OnDeviceAddressChanged(dev);
+			}
+
+			if (dev._name != it->_name)
+			{
+				it->_name = dev._name;
+				if (_pClient)
+					_pClient->OnDeviceNameChanged(dev, it->_name);
+			}
+
+			if (dev._isCoordinator != it->_isCoordinator)
+			{
+				it->_isCoordinator = dev._isCoordinator;
+				if (_pClient)
+					_pClient->OnDeviceCoordinatorStatusChanged(dev);
+			}
+
+			break;
+		}
+	}
+
+}
 
 bool SonosInterface::IsDeviceInList(const char* pUdn)
 {

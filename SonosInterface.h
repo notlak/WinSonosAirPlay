@@ -47,6 +47,9 @@ class SonosInterfaceClient
 public:
 	virtual void OnNewDevice(const SonosDevice& dev) {}
 	virtual void OnDeviceRemoved(const SonosDevice& dev) {}
+	virtual void OnDeviceAddressChanged(const SonosDevice& dev) {}
+	virtual void OnDeviceNameChanged(const SonosDevice& dev, const std::string& oldName) {}
+	virtual void OnDeviceCoordinatorStatusChanged(const SonosDevice& dev) {}
 };
 
 class SonosInterface
@@ -95,6 +98,7 @@ protected:
 
 	bool IsDeviceInList(const char* pUdn);
 	bool GetDeviceByUdn(const char* pUdn, SonosDevice& device);
+	void UpdateDeviceRecord(const SonosDevice& dev);
 
 	std::string CreateSoapRequest(const char* endPoint, const char* host, int port, const char* body, const char* action);
 	bool NetworkRequest(const char* ip, int port, const char* path, std::string& document, const char* req);
