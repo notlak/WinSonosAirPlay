@@ -14,7 +14,8 @@ class SonosDevice
 {
 public:
 	
-	SonosDevice() {}
+	SonosDevice()
+		: _udn(""), _name(""), _address(""), _port(-1), _group(""), _isCoordinator(false) {}
 
 	SonosDevice(std::string& udn, std::string& name, std::string& address, int port, std::string& group, bool isCoordinator) 
 		: _udn(udn), _name(name), _address(address), _port(port), _group(group), _isCoordinator(isCoordinator) {}

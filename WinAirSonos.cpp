@@ -27,20 +27,28 @@ CWinAirSonos::CWinAirSonos()
 CWinAirSonos::~CWinAirSonos()
 {
 	// stop advertising
-	for (auto it = _sdRefMap.begin(); it != _sdRefMap.end(); ++it)
+
 	{
-		DNSServiceRefDeallocate(it->second);
+		std::lock_guard<std::mutex> sdRefMapLock(_sdRefMapMutex);
+
+		for (auto it = _sdRefMap.begin(); it != _sdRefMap.end(); ++it)
+		{
+			DNSServiceRefDeallocate(it->second);
+		}
+
+		_sdRefMap.clear();
 	}
 
-	_sdRefMap.clear();
-
-	// stop the airplay servers
-	for (auto it = _airplayServerMap.begin(); it != _airplayServerMap.end(); ++it)
 	{
-		delete it->second;
-	}
+		std::lock_guard<std::mutex> airplayServerMapLock(_airplayServerMapMutex);
+		// stop the airplay servers
+		for (auto it = _airplayServerMap.begin(); it != _airplayServerMap.end(); ++it)
+		{
+			delete it->second;
+		}
 
-	_sdRefMap.clear();
+		_airplayServerMap.clear();
+	}
 
 	SonosInterface::Delete();
 
@@ -134,6 +142,8 @@ void CWinAirSonos::AdvertiseServer(std::string name, int port, unsigned char* pM
 	std::ostringstream s;
 	char hex[3];
 
+	std::lock_guard<std::mutex> lock(_sdRefMapMutex);
+
 	// if we're already advertising a service with this name, stop it!
 
 	if (_sdRefMap.find(name) != _sdRefMap.end())
@@ -203,6 +213,8 @@ void CWinAirSonos::OnNewDevice(const SonosDevice& dev)
 
 	if (isListening)
 	{
+		std::lock_guard<std::mutex> lock(_airplayServerMapMutex);
+
 		_airplayServerMap[dev._name] = pAirPlayServer;
 
 		// advertise it via mDNS
@@ -233,29 +245,35 @@ void CWinAirSonos::OnDeviceNameChanged(const SonosDevice& dev, const std::string
 
 	// we need to stop advertising the current name
 
-	for (auto it = _sdRefMap.begin(); it != _sdRefMap.end(); ++it)
 	{
-		if (it->first == oldName)
+		std::lock_guard<std::mutex> sdRefMaplock(_sdRefMapMutex);
+
+		for (auto it = _sdRefMap.begin(); it != _sdRefMap.end(); ++it)
 		{
-			DNSServiceRefDeallocate(it->second);
-			_sdRefMap.erase(it);
-			break;
+			if (it->first == oldName)
+			{
+				DNSServiceRefDeallocate(it->second);
+				_sdRefMap.erase(it);
+				break;
+			}
 		}
 	}
 
 	int port = -1;
 
 	// update name of RTSP record in the map and get port
-	std::lock_guard<std::mutex> lock(_airplayServerMapMutex);
-
-	auto it = _airplayServerMap.find(oldName);
-	if (it != _airplayServerMap.end())
 	{
-		port = (it->second)->GetPort();
-		// add new entry in the map with same RTSP port
-		_airplayServerMap[dev._name] = it->second;
-		// delete the entry with the old name
-		_airplayServerMap.erase(it);
+		std::lock_guard<std::mutex> lock(_airplayServerMapMutex);
+
+		auto it = _airplayServerMap.find(oldName);
+		if (it != _airplayServerMap.end())
+		{
+			port = (it->second)->GetPort();
+			// add new entry in the map with same RTSP port
+			_airplayServerMap[dev._name] = it->second;
+			// delete the entry with the old name
+			_airplayServerMap.erase(it);
+		}
 	}
 
 	// start advertising the new name
@@ -323,13 +341,17 @@ void CWinAirSonos::ReadvertiseServers()
 	LOG("CWinAirSonos::ReadvertiseServers()\n");
 
 	// unregister everything
-	for (auto it = _sdRefMap.begin(); it != _sdRefMap.end(); ++it)
-		DNSServiceRefDeallocate(it->second);
+	{
+		std::lock_guard<std::mutex> sdRefMapLock(_sdRefMapMutex);
 
-	_sdRefMap.clear();
+		for (auto it = _sdRefMap.begin(); it != _sdRefMap.end(); ++it)
+			DNSServiceRefDeallocate(it->second);
 
-	//### need to protect the map with a mutex if this is going to be used 
-	
+		_sdRefMap.clear();
+	}
+
+	std::lock_guard<std::mutex> airplayMapLock(_airplayServerMapMutex);
+
 	// now re-advertise all the RTSP servers
 	unsigned char mac[8];
 	for (auto it = _airplayServerMap.begin(); it != _airplayServerMap.end(); ++it)

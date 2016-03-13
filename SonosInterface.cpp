@@ -220,7 +220,7 @@ bool SonosInterface::Init()
 void SonosInterface::SearchThread()
 {
 	DWORD lastSearchTime = 0;
-	const DWORD SearchInterval = 5 * 60 * 1000;
+	const DWORD SearchInterval = 1 * 60 * 1000; //5 * 60 * 1000;
 	MSG msg;
 
 	while (!_shutdown)
@@ -229,7 +229,6 @@ void SonosInterface::SearchThread()
 
 		if (!_searching && now - lastSearchTime > SearchInterval)
 		{
-
 			if (StartAsyncSearch())
 			{
 				lastSearchTime = now; // move to actual finish
@@ -717,12 +716,15 @@ Connection: close
 		// ignore none-speaker devices
 		if (dev._name != "BOOST" && dev._name != "BRIDGE")
 		{
+			//if (!IsDeviceInList(dev._udn.c_str()))
+			//{
+			dev._group = pElem->Attribute("group");
+			dev._isCoordinator = strcmp(pElem->Attribute("coordinator"), "true") == 0;
+
+			ParseUrl(pElem->Attribute("location"), dev._address, dev._port, path);
+
 			if (!IsDeviceInList(dev._udn.c_str()))
 			{
-				dev._group = pElem->Attribute("group");
-				dev._isCoordinator = strcmp(pElem->Attribute("coordinator"), "true") == 0;
-
-				ParseUrl(pElem->Attribute("location"), dev._address, dev._port, path);
 
 				_deviceList.push_back(dev);
 
@@ -754,7 +756,6 @@ Connection: close
 					_groupList.push_back(group);
 
 				}
-
 
 				if (_pClient)
 				{
@@ -843,8 +844,8 @@ bool SonosInterface::GetDeviceByUdn(const char* pUdn, SonosDevice& device)
 
 void SonosInterface::UpnpDeviceAdded(const char* pUdn, const char* pUrl)
 {
-	if (!IsDeviceInList(pUdn))
-	{
+	//if (!IsDeviceInList(pUdn))
+	//{
 		std::string host, path, xml;
 		int port;
 
@@ -862,7 +863,7 @@ void SonosInterface::UpnpDeviceAdded(const char* pUdn, const char* pUrl)
 		//{
 		//	_pClient->OnNewDevice(d);
 		//}
-	}
+	//}
 }
 
 void SonosInterface::UpnpDeviceRemoved(const char* pUdn)
