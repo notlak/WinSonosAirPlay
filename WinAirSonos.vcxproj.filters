@@ -56,6 +56,9 @@
     <ClInclude Include="StatsCollector.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="VoiceRssInterface.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="WinAirSonos.cpp">
@@ -92,6 +95,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="StatsCollector.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VoiceRssInterface.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

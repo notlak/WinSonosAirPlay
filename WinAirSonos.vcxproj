@@ -216,6 +216,7 @@
     <ClInclude Include="tinyxml2.h" />
     <ClInclude Include="Transcoder.h" />
     <ClInclude Include="UdpSocket.h" />
+    <ClInclude Include="VoiceRssInterface.h" />
     <ClInclude Include="WinAirSonos.h" />
   </ItemGroup>
   <ItemGroup>
@@ -235,6 +236,7 @@
     <ClCompile Include="tinyxml2.cpp" />
     <ClCompile Include="Transcoder.cpp" />
     <ClCompile Include="UdpSocket.cpp" />
+    <ClCompile Include="VoiceRssInterface.cpp" />
     <ClCompile Include="WinAirSonos.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -471,6 +471,7 @@ void CWinAirSonos::Shutdown()
 }
 
 #include <conio.h>
+#include <openssl\sha.h>
 
 int main()
 {
