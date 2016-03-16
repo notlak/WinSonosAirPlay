@@ -204,6 +204,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\libmp3lame\lame.h" />
+    <ClInclude Include="HttpControlServer.h" />
     <ClInclude Include="HttpServer.h" />
     <ClInclude Include="Log.h" />
     <ClInclude Include="NetworkServer.h" />
@@ -220,6 +221,7 @@
     <ClInclude Include="WinAirSonos.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="HttpControlServer.cpp" />
     <ClCompile Include="HttpServer.cpp" />
     <ClCompile Include="Log.cpp" />
     <ClCompile Include="NetworkServer.cpp" />

@@ -236,12 +236,18 @@ void VoiceRssInterface::EscapeString(const std::string& in, std::string& out)
 	{
 		if (in[i] == ' ')
 			os << "%20";
+		else if (in[i] == '!')
+			os << "%21";
 		else if (in[i] == '"')
 			os << "%22";
 		else if (in[i] == '#')
 			os << "%23";
 		else if (in[i] == '$')
 			os << "%24";
+		else if (in[i] == ',')
+			os << "%2C";
+		else if (in[i] == '.')
+			os << "%2E";
 		else if (in[i] == '/')
 			os << "%2F";
 		else if (in[i] == '<')

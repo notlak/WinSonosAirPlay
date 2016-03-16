@@ -59,6 +59,9 @@
     <ClInclude Include="VoiceRssInterface.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="HttpControlServer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="WinAirSonos.cpp">
@@ -98,6 +101,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="VoiceRssInterface.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="HttpControlServer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

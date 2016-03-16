@@ -29,7 +29,12 @@ void HttpServer::OnRequest(NetworkServerConnection& connection, NetworkRequest& 
 		request.type.c_str(), request.path.c_str(), request.protocol.c_str());
 
 	// send response
+	/*
+	if (request.path.substr(0, 4) == "/tts")
+	{
 
+	}
+	*/
 	std::ostringstream os;
 
 	std::string body = "<html><body>HttpServer test</body></html>";
@@ -43,3 +48,17 @@ void HttpServer::OnRequest(NetworkServerConnection& connection, NetworkRequest& 
 	connection.Transmit(os.str().c_str(), os.str().length());
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// HttpServerConnection implementation
+///////////////////////////////////////////////////////////////////////////////
+
+HttpServerConnection::HttpServerConnection(NetworkServerInterface* pServerInterface, SOCKET socket, SOCKADDR_IN& remoteAddr)
+	: NetworkServerConnection(pServerInterface, socket, remoteAddr)
+{
+
+}
+
+HttpServerConnection::~HttpServerConnection()
+{
+
+}

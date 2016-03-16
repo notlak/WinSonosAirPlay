@@ -1,7 +1,19 @@
 #pragma once
 #include "NetworkServer.h"
 
-class HttpServer : public NetworkServer<NetworkServerConnection>
+
+class HttpServerConnection : public NetworkServerConnection
+{
+public:
+
+	HttpServerConnection(NetworkServerInterface* pServerInterface, SOCKET socket, SOCKADDR_IN& remoteAddr);
+	~HttpServerConnection();
+
+protected:
+
+};
+
+class HttpServer : public NetworkServer<HttpServerConnection>
 {
 public:
 	HttpServer();

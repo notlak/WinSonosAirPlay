@@ -13,7 +13,7 @@
 #include <map>
 #include <sstream>
 
-#include "VoiceRssInterface.h"
+#include "HttpControlServer.h"
 
 //#ifdef _DEBUG
 //#define new DEBUG_NEW
@@ -485,7 +485,7 @@ int main()
 	if (iResult != 0) {
 		printf("WSAStartup failed: %d\n", iResult);
 	}
-
+	/*
 	VoiceRssInterface vri;
 
 	const char* text = "hello this is a test";
@@ -497,6 +497,10 @@ int main()
 	WSACleanup();
 
 	return 0;
+	*/
+
+	HttpControlServer controlServer;
+	controlServer.StartListening(nullptr, 88);
 
 	CWinAirSonos winAirSonos;
 
