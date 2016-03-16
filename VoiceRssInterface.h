@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 //
 // This class is designed to integrate with the voicerss.org website to obtain
@@ -19,7 +20,7 @@ public:
 
 protected:
 
-	bool NetworkRequest(const sockaddr_in* addr, const char* path, std::string& document, const char* req);
+	bool NetworkRequest(const std::string& hostname, int port, const std::string& req, std::vector<unsigned char>& content);
 	void EscapeString(const std::string& in, std::string& out);
 
 	std::string _apiKey;

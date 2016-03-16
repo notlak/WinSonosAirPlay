@@ -13,6 +13,8 @@
 #include <map>
 #include <sstream>
 
+#include "VoiceRssInterface.h"
+
 //#ifdef _DEBUG
 //#define new DEBUG_NEW
 //#endif
@@ -475,6 +477,27 @@ void CWinAirSonos::Shutdown()
 
 int main()
 {
+	int iResult;
+
+	// Initialize Winsock
+	WSADATA wsaData;
+	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	if (iResult != 0) {
+		printf("WSAStartup failed: %d\n", iResult);
+	}
+
+	VoiceRssInterface vri;
+
+	const char* text = "hello this is a test";
+
+	vri.Initialise("40885560089140ba89f5caef69ccd65a", R"(c:\temp)");
+	std::string filename;
+	vri.Convert(text, filename);
+
+	WSACleanup();
+
+	return 0;
+
 	CWinAirSonos winAirSonos;
 
 	winAirSonos.Initialise();
