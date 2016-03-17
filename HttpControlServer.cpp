@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "HttpControlServer.h"
 #include "VoiceRssInterface.h"
+#include "SonosInterface.h"
 #include <openssl\sha.h>
 #include <sstream>
 #include <iomanip>
@@ -84,41 +85,64 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 			"Content-Length: " << body.length() << "\r\n\r\n" << body;
 		connection.Transmit(os.str().c_str(), os.str().length());
 		*/
-
 	}
+}
+
+std::vector<std::string> Split(const std::string& str, char delimiter)
+{
+	std::vector<std::string> segments;
+
+	size_t pos = 0, lastPos = 0;
+
+	while ((pos = str.find(delimiter, lastPos)) != std::string::npos)
+	{
+		if (pos == lastPos) // case where first char is delimiter
+		{
+			lastPos++;
+			continue;
+		}
+
+		segments.push_back(str.substr(lastPos, (pos - lastPos)));
+
+		lastPos = pos + 1;
+	}
+
+	// account for final portion if not ending with delimiter
+	if (lastPos < str.size()-1)
+		segments.push_back(str.substr(lastPos));
+
+	return segments;
 }
 
 bool HttpControlServer::OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request)
 {
 	bool success = false;
 
+
+	std::vector<std::string> s = Split(request.path, '/');
+
 	// we're here because request.path[0..4] = '/say/'
 
 	if (request.type == "GET")
 	{
+		//std::string speaker = request.path.find(nextSlash + 1, );
 		std::string text = request.path.substr(5, request.path.find(" ", 5));
 		text = UnescapeText(text);
 
 		// calculate filename
 
-		std::string pathname = _ttsPath + "\\" + GetTextHashFilename(text);
+		std::string filename = GetTextHashFilename(text);
+		std::string pathname = _ttsPath + "\\" + filename;
 
 		// look for the file
 
 		struct _stat stats;
 
-		char* pAudioData = nullptr;
 		std::vector<unsigned char> audioData;
 
 		if (_stat(pathname.c_str(), &stats) != -1) // we have the audio already
 		{
 			LOG("HttpControlServer::OnSayCommand() using cached TTS sample\n");
-
-			pAudioData = new char[stats.st_size]; // not expecting a large file
-
-			FILE* fin = fopen(pathname.c_str(), "rb");
-			fread(pAudioData, 1, stats.st_size, fin);
-			fclose(fin);
 
 			success = true;
 		}
@@ -130,7 +154,6 @@ bool HttpControlServer::OnSayCommand(NetworkServerConnection& connection, Networ
 			if (vi.Convert(text, audioData))
 			{
 				LOG("HttpControlServer::OnSayCommand() got TTS sample from the web\n");
-				pAudioData = (char*)audioData.data();
 
 				success = true;
 			}
@@ -152,18 +175,27 @@ bool HttpControlServer::OnSayCommand(NetworkServerConnection& connection, Networ
 			else
 			{
 				LOG("HttpControlServer::OnSayCommand() error: failed to save audio file %s\n", pathname.c_str());
+				success = false;
 			}
-		}
-		else
-		{
-			// we need to delete the buffer array we used when loading the file
-			delete[] pAudioData;
 		}
 		
 		// now say it!
 
 		if (success)
 		{
+			const int MaxHostLen = 255;
+			char hostname[MaxHostLen] = { 0 };
+
+			if (gethostname(hostname, MaxHostLen))
+			{
+				LOG("HttpControlServer::OnSayCommand() error: unable to get hostname\n");
+			}
+			else
+			{
+				std::ostringstream uri;
+				uri << "http://" << hostname << ":" << _port << "/tts/" << filename;
+				SonosInterface::GetInstance()->PlayFileFromServer("Kitchen", uri.str(), "Voice Alert");
+			}
 
 		}
 
@@ -182,23 +214,35 @@ bool HttpControlServer::OnServeTts(NetworkServerConnection& connection, NetworkR
 
 	std::string pathname = _ttsPath + "\\" + request.path.substr(5);
 
+	NetworkResponse resp("HTTP/1.0", 200, "OK");
 
-	struct _stat stats;
+	FILE* fin = fopen(pathname.c_str(), "rb");
 
-	if (_stat(_ttsPath.c_str(), &stats) != -1)
+	if (fin)
 	{
+		fseek(fin, 0L, SEEK_END);
+		long size = ftell(fin);
+		fseek(fin, 0L, SEEK_SET);
 
-		//FILE* fin = fopen(pathname.c_str(rb));
+		char* pAudioData = new char[size];
+		fread(pAudioData, 1, size, fin);
+		fclose(fin);
 
-		//if ()
-		{
+		resp.AddHeaderField("Content-Type", "audio/mpeg3");
+		resp.AddContent(pAudioData, size);
 
-		}
+		delete[] pAudioData;
+
 	}
 	else
 	{
-		return false;
+		resp.responseCode = 404;
+		resp.reason = "Not Found";
 	}
+
+	connection.SendResponse(resp);
+
+	return true;
 }
 
 std::string HttpControlServer::UnescapeText(const std::string& text)

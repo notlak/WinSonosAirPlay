@@ -1035,14 +1035,17 @@ bool SonosInterface::PlayFileFromServerBlocking(std::string room, std::string ur
 
 	if (room.empty()) // play on every speaker
 	{
-		
+		//### todo
 	}
 	else
 	{
 		if (!GetDeviceByName(room.c_str(), dev))
+		{
+			LOG("SonosInterface::PlayFileFromServerBlocking() couldn't find %s\n", room.c_str());
 			return false;
+		}
 
-
+		PlayUriBlocking(dev._udn, uri, "Voice Alert");
 	}
 }
 
