@@ -830,9 +830,29 @@ bool SonosInterface::GetDeviceByUdn(const char* pUdn, SonosDevice& device)
 {
 	bool found = false;
 
+	std::lock_guard<std::mutex> lock(_listMutex);
+
 	for (std::list<SonosDevice>::iterator it = _deviceList.begin(); it != _deviceList.end() && !found; it++)
 	{
 		if (it->_udn == pUdn)
+		{
+			device = *it;
+			found = true;
+		}
+	}
+
+	return found;
+}
+
+bool SonosInterface::GetDeviceByName(const char* pName, SonosDevice& device)
+{
+	bool found = false;
+
+	std::lock_guard<std::mutex> lock(_listMutex);
+
+	for (std::list<SonosDevice>::iterator it = _deviceList.begin(); it != _deviceList.end() && !found; it++)
+	{
+		if (it->_name == pName)
 		{
 			device = *it;
 			found = true;
@@ -900,6 +920,14 @@ bool SonosInterface::Stop(std::string udn)
 bool SonosInterface::SetVolume(std::string udn, int volume)
 {
 	std::thread thread(&SonosInterface::SetVolumeBlocking, this, udn, volume);
+	thread.detach();
+
+	return true;
+}
+
+bool SonosInterface::PlayFileFromServer(std::string room, std::string uri, std::string title)
+{
+	std::thread thread(&SonosInterface::PlayFileFromServerBlocking, this, room, uri, title);
 	thread.detach();
 
 	return true;
@@ -998,6 +1026,24 @@ bool SonosInterface::SetVolumeBlocking(std::string udn, int volume)
 	std::string resp;
 
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
+}
+
+bool SonosInterface::PlayFileFromServerBlocking(std::string room, std::string uri, std::string title)
+{
+	LOG("Sonos: PLAYFILE %s -> %s\n", uri.c_str(), room.c_str());
+	SonosDevice dev;
+
+	if (room.empty()) // play on every speaker
+	{
+		
+	}
+	else
+	{
+		if (!GetDeviceByName(room.c_str(), dev))
+			return false;
+
+
+	}
 }
 
 /* Example from Sonos Play:1

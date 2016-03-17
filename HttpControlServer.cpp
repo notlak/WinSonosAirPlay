@@ -1,17 +1,29 @@
 #include "stdafx.h"
 #include "HttpControlServer.h"
+#include "VoiceRssInterface.h"
 #include <openssl\sha.h>
 #include <sstream>
 #include <iomanip>
 
 
 HttpControlServer::HttpControlServer()
+	: _ttsPath("TTS")
 {
 }
 
 
 HttpControlServer::~HttpControlServer()
 {
+}
+
+void HttpControlServer::Initialise(const std::string& ttsPath)
+{
+	_ttsPath = ttsPath;
+
+	CreateDirectoryA(_ttsPath.c_str(), nullptr);
+
+	// ### todo: check if ttsPath exists - if not create it
+	// also decide on trailing '\' or not
 }
 
 // example response:
@@ -29,31 +41,57 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 	LOG("HttpControlServer::OnRequest() type:[%s] path:[%s] protocol:[%s]\n", 
 		request.type.c_str(), request.path.c_str(), request.protocol.c_str());
 
-	std::ostringstream os;
-	std::string body;
-
 	if (request.path.substr(0, 5) == "/say/") // command for text to speech via Sonos
 	{
-		OnSayCommand(connection, request);
+		NetworkResponse resp("HTTP/1.0", 200, "OK");
+
+		if (!OnSayCommand(connection, request))
+		{
+			resp.responseCode = 500;
+			resp.reason = "Internal Server Error";
+			resp.AddHeaderField("Content-Type", "text/plain");
+			std::string body = "Error";
+			resp.AddContent(body.c_str(), body.size());
+			connection.SendResponse(resp, true);
+		}
+		else
+		{
+			resp.AddHeaderField("Content-Type", "text/plain");
+			std::string body = "OK";
+			resp.AddContent(body.c_str(), body.size());
+			connection.SendResponse(resp, true);
+		}
+
 	}
 	else if (request.path.substr(0, 5) == "/tts/") // sonos requesting mp3 text to speech audio
 	{
-
+		OnServeTts(connection, request);
 	}
 	else
 	{
-		body = "<html><body>HttpControlServer</body></html>";
-		os << "HTTP/1.1 200 OK\r\n"
-			"Date: Fri, 31 Dec 1999 23:59:59 GMT\r\n"
-			"Connection: close\r\n"
+		NetworkResponse resp("HTTP/1.0", 200, "OK");
+		resp.AddHeaderField("Content-Type", "text/html");
+		std::string body = "<html><body>HttpControlServer</body></html>";
+		resp.AddContent(body.c_str(), body.size());
+		connection.SendResponse(resp, true);
+
+		/*
+		std::ostringstream os;
+		os << "HTTP/1.0 200 OK\r\n"
+			//"Date: Fri, 31 Dec 1999 23:59:59 GMT\r\n"
+			//"Connection: close\r\n"
 			"Content-Type: text/html\r\n"
 			"Content-Length: " << body.length() << "\r\n\r\n" << body;
 		connection.Transmit(os.str().c_str(), os.str().length());
+		*/
+
 	}
 }
 
-void HttpControlServer::OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request)
+bool HttpControlServer::OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	bool success = false;
+
 	// we're here because request.path[0..4] = '/say/'
 
 	if (request.type == "GET")
@@ -63,16 +101,103 @@ void HttpControlServer::OnSayCommand(NetworkServerConnection& connection, Networ
 
 		// calculate filename
 
-		std::string filename = GetTextHashFilename(text);
+		std::string pathname = _ttsPath + "\\" + GetTextHashFilename(text);
 
 		// look for the file
 
+		struct _stat stats;
 
+		char* pAudioData = nullptr;
+		std::vector<unsigned char> audioData;
+
+		if (_stat(pathname.c_str(), &stats) != -1) // we have the audio already
+		{
+			LOG("HttpControlServer::OnSayCommand() using cached TTS sample\n");
+
+			pAudioData = new char[stats.st_size]; // not expecting a large file
+
+			FILE* fin = fopen(pathname.c_str(), "rb");
+			fread(pAudioData, 1, stats.st_size, fin);
+			fclose(fin);
+
+			success = true;
+		}
+		else
+		{
+			VoiceRssInterface vi;
+			vi.Initialise("40885560089140ba89f5caef69ccd65a");
+
+			if (vi.Convert(text, audioData))
+			{
+				LOG("HttpControlServer::OnSayCommand() got TTS sample from the web\n");
+				pAudioData = (char*)audioData.data();
+
+				success = true;
+			}
+			else
+			{
+				LOG("HttpControlServer::OnSayCommand() failed to get audio\n");
+			}
+		}
+
+		if (audioData.size() > 0) // i.e. we just got this from the web, save it
+		{
+			FILE* faudio = fopen(pathname.c_str(), "wb");
+
+			if (faudio)
+			{
+				fwrite(audioData.data(), 1, audioData.size(), faudio);
+				fclose(faudio);
+			}
+			else
+			{
+				LOG("HttpControlServer::OnSayCommand() error: failed to save audio file %s\n", pathname.c_str());
+			}
+		}
+		else
+		{
+			// we need to delete the buffer array we used when loading the file
+			delete[] pAudioData;
+		}
+		
+		// now say it!
+
+		if (success)
+		{
+
+		}
 
 	}
 	else
 	{
 		// ### todo: POST
+	}
+
+	return success;
+}
+
+bool HttpControlServer::OnServeTts(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	// we're here because request.path[0..4] = '/tts/'
+
+	std::string pathname = _ttsPath + "\\" + request.path.substr(5);
+
+
+	struct _stat stats;
+
+	if (_stat(_ttsPath.c_str(), &stats) != -1)
+	{
+
+		//FILE* fin = fopen(pathname.c_str(rb));
+
+		//if ()
+		{
+
+		}
+	}
+	else
+	{
+		return false;
 	}
 }
 

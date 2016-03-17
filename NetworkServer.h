@@ -83,7 +83,9 @@ public:
 	int TransmitBufferEntries();
 
 	virtual void Transmit(const char* buff, int len);
-	virtual void SendResponse(const NetworkResponse& response);
+	virtual void SendResponse(const NetworkResponse& response, bool closeAfterTx = false);
+
+	bool _closeAfterTx;
 
 	class TransmitBuffer
 	{

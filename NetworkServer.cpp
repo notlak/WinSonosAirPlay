@@ -119,11 +119,12 @@ NetworkServerConnection::NetworkServerConnection(NetworkServerInterface* pServer
 	_pReadThread(nullptr),
 	_pTransmitThread(nullptr),
 	_nRxBytes(0),
-	_rxBuffSize(32768)
+	_rxBuffSize(32768),
+	_closeAfterTx(false) // true for e.g. HTTP without persistent connection
 {
 	char pBuff[INET_ADDRSTRLEN];
 	LOG("NetworkServerConnection() remote ip:%s\n", inet_ntop(AF_INET, (void*)&remoteAddr.sin_addr, pBuff, INET_ADDRSTRLEN));
-	//_pRxBuff = new char[RxBuffSize];
+	
 	_pRxBuff = new char[_rxBuffSize];
 
 }
@@ -142,8 +143,11 @@ NetworkServerConnection::~NetworkServerConnection()
 
 	delete[] _pRxBuff;
 
-	if (_pReadThread->joinable())
+	if (_pReadThread && _pReadThread->joinable())
 		_pReadThread->join();
+
+	if (_pTransmitThread && _pTransmitThread->joinable())
+		_pTransmitThread->join();
 
 	delete _pReadThread;
 	
@@ -204,11 +208,11 @@ bool NetworkServerConnection::Close()
 
 	// wait for threads to terminate
 
-	//if (_pReadThread)
-		//_pReadThread->join();
+	//if (_pReadThread && _pReadThread->joinable())
+	//	_pReadThread->join();
 
-	if (_pTransmitThread)
-		_pTransmitThread->join();
+	//if (_pTransmitThread && _pTransmitThread->joinable())
+	//	_pTransmitThread->join();
 
 	return true;
 }
@@ -350,8 +354,10 @@ void NetworkServerConnection::Transmit(const char* pBuff, int len)
 	_transmitCv.notify_one(); // only 1 waiting thread
 }
 
-void NetworkServerConnection::SendResponse(const NetworkResponse& response)
+void NetworkServerConnection::SendResponse(const NetworkResponse& response, bool closeAfterTx)
 {
+	_closeAfterTx = closeAfterTx;
+
 	std::string header = response.GetHeader();
 
 	int len = header.length() + response.contentLength;
@@ -370,6 +376,8 @@ void NetworkServerConnection::SendResponse(const NetworkResponse& response)
 
 void NetworkServerConnection::TransmitThread()
 {
+	bool responseComplete = false;
+
 	while (!_closeConnection)
 	{
 		std::unique_lock<std::mutex> lock(_transmitMutex);
@@ -396,10 +404,39 @@ tx:
 
 			_txQueue.pop_front();
 			delete pTxBuff;
+
+			responseComplete = true;
 		}
+		/*
+		if (_closeAfterTx && responseComplete)
+		{
+			LOG("NetworkServerConnection::TransmitThread() closing connection after response transmitted\n");
+
+			if (!_closeConnection) // only do the following if we're not being shutdown already
+			{
+				// make sure the mutex is not in use otherwise
+				// we'll get an assertion when from its dtor
+				_transmitCv._Unregister(_transmitMutex);
+				lock.release();
+				_transmitMutex.unlock();
+
+				// detach this thread
+				_pTransmitThread->detach();
+
+				LOG("Calling remove connection id:%d port:%d\n", _id, _pServer->GetPort());
+
+				_pServer->RemoveConnection(_id);
+			}
+
+			// must not check member vars now as object will have been
+			// deleted
+
+			break;
+		}
+		*/
 	}
 
-	LOG("Transmit thread complete port:%d\n", _pServer->GetPort());
+	LOG("Transmit thread complete port:%d\n", _closeAfterTx ? -1 :_pServer->GetPort());
 }
 
 int NetworkServerConnection::TransmitBufferEntries()

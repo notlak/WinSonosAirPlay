@@ -78,6 +78,8 @@ public:
 	bool Stop(std::string udn);
 	bool SetVolume(std::string udn, int volume);
 
+	bool PlayFileFromServer(std::string room, std::string uri, std::string title);
+
 	// synchronous calls that wait for a response
 	// all the arguments are passed by value in case they are called as
 	// new thread functions (in which case the original values may go out
@@ -89,6 +91,8 @@ public:
 	bool PauseBlocking(std::string udn);
 	bool StopBlocking(std::string udn);
 
+	bool PlayFileFromServerBlocking(std::string room, std::string uri, std::string title);
+
 protected:
 
 	std::string FormatMetaData(const char* pTitle);
@@ -99,6 +103,7 @@ protected:
 
 	bool IsDeviceInList(const char* pUdn);
 	bool GetDeviceByUdn(const char* pUdn, SonosDevice& device);
+	bool GetDeviceByName(const char* pName, SonosDevice& device);
 	void UpdateDeviceRecord(const SonosDevice& dev);
 
 	std::string CreateSoapRequest(const char* endPoint, const char* host, int port, const char* body, const char* action);

@@ -18,13 +18,12 @@ VoiceRssInterface::~VoiceRssInterface()
 
 }
 
-void VoiceRssInterface::Initialise(const std::string& apiKey, const std::string& dirPath)
+void VoiceRssInterface::Initialise(const std::string& apiKey)
 {
 	_apiKey = apiKey;
-	_dirPath = dirPath;
 }
 
-bool VoiceRssInterface::Convert(const std::string& text, std::string& filename)
+bool VoiceRssInterface::Convert(const std::string& text, std::vector<unsigned char>& audioData)
 {
 	std::ostringstream req;
 	std::string escText("");
@@ -36,46 +35,9 @@ bool VoiceRssInterface::Convert(const std::string& text, std::string& filename)
 		<< "/?key=" << _apiKey << "&src=" << escText << "&hl=en-gb&f=44khz_16bit_mono"
 		<< " HTTP/1.0\r\nHost: api.voicerss.org\r\n\r\n";
 
-	const int HashLen = 256 / 8;
+	bool success = NetworkRequest("api.voicerss.org", 80, req.str(), audioData);
 
-	unsigned char hash[HashLen];
-
-	SHA256((unsigned char*)text.c_str(), text.size(), hash);
-
-	std::ostringstream os;
-
-	for (int i = 0; i < HashLen; i++)
-	{
-		os << std::setfill('0') << std::setw(2) << std::hex << (int)hash[i];
-	}
-
-	os << ".mp3";
-
-	filename = os.str();
-
-	std::vector<unsigned char> content;
-
-	bool success = NetworkRequest("api.voicerss.org", 80, req.str(), content);
-
-	if (success && content.size() > 0)
-	{
-		std::string path = _dirPath + "\\" + filename;
-
-		FILE* faudio = fopen(path.c_str(), "wb");
-
-		if (faudio)
-		{
-			fwrite(content.data(), 1, content.size(), faudio);
-			fclose(faudio);
-		}
-		else
-		{
-			LOG("VoiceRssInterface::Convert() error: unable to write to %s\n", path.c_str());
-		}
-			
-	}
-
-	return true;
+	return success;
 }
 
 bool VoiceRssInterface::NetworkRequest(const std::string& hostname, int port, const std::string& req, std::vector<unsigned char>& content)

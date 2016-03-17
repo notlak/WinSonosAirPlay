@@ -19,12 +19,18 @@ public:
 	HttpControlServer();
 	virtual ~HttpControlServer();
 
+	void Initialise(const std::string& ttsPath);
+
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request);
 
 protected:
 
-	void OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnServeTts(NetworkServerConnection& connection, NetworkRequest& request);
+
 	std::string UnescapeText(const std::string& text);
 	std::string GetTextHashFilename(const std::string& text);
+
+	std::string _ttsPath;
 };
 

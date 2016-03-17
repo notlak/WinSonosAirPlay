@@ -477,6 +477,7 @@ void CWinAirSonos::Shutdown()
 
 int main()
 {
+
 	int iResult;
 
 	// Initialize Winsock
@@ -500,6 +501,7 @@ int main()
 	*/
 
 	HttpControlServer controlServer;
+	controlServer.Initialise("TTS");
 	controlServer.StartListening(nullptr, 88);
 
 	CWinAirSonos winAirSonos;
