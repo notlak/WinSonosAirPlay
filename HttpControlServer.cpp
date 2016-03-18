@@ -6,7 +6,6 @@
 #include <sstream>
 #include <iomanip>
 
-
 HttpControlServer::HttpControlServer()
 	: _ttsPath("TTS")
 {
@@ -75,20 +74,10 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 		std::string body = "<html><body>HttpControlServer</body></html>";
 		resp.AddContent(body.c_str(), body.size());
 		connection.SendResponse(resp, true);
-
-		/*
-		std::ostringstream os;
-		os << "HTTP/1.0 200 OK\r\n"
-			//"Date: Fri, 31 Dec 1999 23:59:59 GMT\r\n"
-			//"Connection: close\r\n"
-			"Content-Type: text/html\r\n"
-			"Content-Length: " << body.length() << "\r\n\r\n" << body;
-		connection.Transmit(os.str().c_str(), os.str().length());
-		*/
 	}
 }
 
-std::vector<std::string> Split(const std::string& str, char delimiter)
+std::vector<std::string> HttpControlServer::Split(const std::string& str, char delimiter)
 {
 	std::vector<std::string> segments;
 
@@ -118,15 +107,14 @@ bool HttpControlServer::OnSayCommand(NetworkServerConnection& connection, Networ
 {
 	bool success = false;
 
-
-	std::vector<std::string> s = Split(request.path, '/');
+	std::vector<std::string> pathParts = Split(request.path, '/');
 
 	// we're here because request.path[0..4] = '/say/'
 
 	if (request.type == "GET")
 	{
-		//std::string speaker = request.path.find(nextSlash + 1, );
-		std::string text = request.path.substr(5, request.path.find(" ", 5));
+		std::string speaker = pathParts[1]; // 0 will be "say"
+		std::string text = pathParts[2]; 
 		text = UnescapeText(text);
 
 		// calculate filename
@@ -192,9 +180,11 @@ bool HttpControlServer::OnSayCommand(NetworkServerConnection& connection, Networ
 			}
 			else
 			{
+				// speaker "ALL" = all speakers
+
 				std::ostringstream uri;
 				uri << "http://" << hostname << ":" << _port << "/tts/" << filename;
-				SonosInterface::GetInstance()->PlayFileFromServer("Kitchen", uri.str(), "Voice Alert");
+				SonosInterface::GetInstance()->PlayFileFromServer(speaker, uri.str(), "Voice Alert");
 			}
 
 		}

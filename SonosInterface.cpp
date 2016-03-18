@@ -1028,25 +1028,32 @@ bool SonosInterface::SetVolumeBlocking(std::string udn, int volume)
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
 }
 
-bool SonosInterface::PlayFileFromServerBlocking(std::string room, std::string uri, std::string title)
+bool SonosInterface::PlayFileFromServerBlocking(std::string speaker, std::string uri, std::string title)
 {
-	LOG("Sonos: PLAYFILE %s -> %s\n", uri.c_str(), room.c_str());
+	LOG("Sonos: PLAYFILE %s -> %s\n", uri.c_str(), speaker.c_str());
 	SonosDevice dev;
 
-	if (room.empty()) // play on every speaker
+	if (speaker == "ALL") // play on every speaker
 	{
-		//### todo
+		std::lock_guard<std::mutex> lock(_listMutex);
+
+		for (SonosDevice& d : _deviceList)
+		{
+			PlayUriBlocking(d._udn, uri, title);
+		}
 	}
 	else
 	{
-		if (!GetDeviceByName(room.c_str(), dev))
+		if (!GetDeviceByName(speaker.c_str(), dev))
 		{
-			LOG("SonosInterface::PlayFileFromServerBlocking() couldn't find %s\n", room.c_str());
+			LOG("SonosInterface::PlayFileFromServerBlocking() couldn't find %s\n", speaker.c_str());
 			return false;
 		}
 
-		PlayUriBlocking(dev._udn, uri, "Voice Alert");
+		PlayUriBlocking(dev._udn, uri, title);
 	}
+
+	return true;
 }
 
 /* Example from Sonos Play:1
