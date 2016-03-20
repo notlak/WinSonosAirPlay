@@ -93,6 +93,12 @@ public:
 
 	bool PlayFileFromServerBlocking(std::string room, std::string uri, std::string title);
 
+	bool GetVolumeBlocking(std::string id, bool idIsUdn, int& volume);
+	bool GetMuteBlocking(std::string id, bool idIsUdn, bool& isMuted);
+	bool GetTransportInfoBlocking(std::string id, bool idIsUdn, bool& tbd);
+	bool GetPositionInfoBlocking(std::string id, bool idIsUdn, bool& tbd);
+
+
 protected:
 
 	std::string FormatMetaData(const char* pTitle);

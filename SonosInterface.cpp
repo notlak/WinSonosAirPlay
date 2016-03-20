@@ -1033,13 +1033,15 @@ bool SonosInterface::PlayFileFromServerBlocking(std::string speaker, std::string
 	LOG("Sonos: PLAYFILE %s -> %s\n", uri.c_str(), speaker.c_str());
 	SonosDevice dev;
 
+	bool success = false;
+
 	if (speaker == "ALL") // play on every speaker
 	{
 		std::lock_guard<std::mutex> lock(_listMutex);
 
 		for (SonosDevice& d : _deviceList)
 		{
-			PlayUriBlocking(d._udn, uri, title);
+			success = PlayUriBlocking(d._udn, uri, title);
 		}
 	}
 	else
@@ -1050,10 +1052,10 @@ bool SonosInterface::PlayFileFromServerBlocking(std::string speaker, std::string
 			return false;
 		}
 
-		PlayUriBlocking(dev._udn, uri, title);
+		success = PlayUriBlocking(dev._udn, uri, title);
 	}
 
-	return true;
+	return success;
 }
 
 /* Example from Sonos Play:1
@@ -1095,6 +1097,142 @@ bool SonosInterface::SetAvTransportUriBlocking(std::string udn, std::string uri,
 	std::string resp;
 
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
+}
+
+bool SonosInterface::GetVolumeBlocking(std::string id, bool idIsUdn, int& volume)
+{
+	LOG("Sonos: GET VOLUME from %s\n", id.c_str());
+
+	SonosDevice dev;
+
+	if (idIsUdn)
+	{
+		if (!GetDeviceByUdn(id.c_str(), dev))
+			return false;
+	}
+	else
+	{
+		if (!GetDeviceByName(id.c_str(), dev))
+			return false;
+	}
+
+	std::ostringstream body;
+	body << R"(<u:GetVolume xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1"><InstanceID>0</InstanceID><Channel>Master</Channel></u:GetVolume>)";
+
+	std::string req = CreateSoapRequest(RenderingEndPoint,
+		dev._address.c_str(), dev._port,
+		body.str().c_str(),
+		"urn:schemas-upnp-org:service:RenderingControl:1#GetVolume");
+
+	std::string resp;
+
+	bool success = NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/RenderingControl/Control", resp, req.c_str());
+
+	// ### now parse the result - look for <CurrentVolume>
+
+	return success;
+}
+
+bool SonosInterface::GetMuteBlocking(std::string id, bool idIsUdn, bool& isMuted)
+{
+	LOG("Sonos: GET MUTE from %s\n", id.c_str());
+
+	SonosDevice dev;
+
+	if (idIsUdn)
+	{
+		if (!GetDeviceByUdn(id.c_str(), dev))
+			return false;
+	}
+	else
+	{
+		if (!GetDeviceByName(id.c_str(), dev))
+			return false;
+	}
+
+	std::ostringstream body;
+	body << R"(<u:GetMute xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1"><InstanceID>0</InstanceID><Channel>Master</Channel></u:GetMute>)";
+
+	std::string req = CreateSoapRequest(RenderingEndPoint,
+		dev._address.c_str(), dev._port,
+		body.str().c_str(),
+		"urn:schemas-upnp-org:service:RenderingControl:1#CurrentMute");
+
+	std::string resp;
+
+	bool success = NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/RenderingControl/Control", resp, req.c_str());
+
+	// ### now parse the result - look for <CurrentMute>
+
+	return success;
+}
+
+bool SonosInterface::GetTransportInfoBlocking(std::string id, bool idIsUdn, bool& tbd)
+{
+	LOG("Sonos: GET TransportInfo from %s\n", id.c_str());
+
+	SonosDevice dev;
+
+	if (idIsUdn)
+	{
+		if (!GetDeviceByUdn(id.c_str(), dev))
+			return false;
+	}
+	else
+	{
+		if (!GetDeviceByName(id.c_str(), dev))
+			return false;
+	}
+
+	std::ostringstream body;
+	body << R"(<u:GetTransportInfo xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID></u:GetTransportInfo>)";
+
+	std::string req = CreateSoapRequest(AvTransportEndPoint,
+		dev._address.c_str(), dev._port,
+		body.str().c_str(),
+		"urn:schemas-upnp-org:service:AVTransport:1#GetTransportInfo");
+
+	std::string resp;
+
+	bool success = NetworkRequest(dev._address.c_str(), dev._port, AvTransportEndPoint, resp, req.c_str());
+
+	// ### now parse the result - look for <CurrentTransportState>
+
+	return success;
+}
+
+bool SonosInterface::GetPositionInfoBlocking(std::string id, bool idIsUdn, bool& tbd)
+{
+	LOG("Sonos: GET PositionInfo from %s\n", id.c_str());
+
+	SonosDevice dev;
+
+	if (idIsUdn)
+	{
+		if (!GetDeviceByUdn(id.c_str(), dev))
+			return false;
+	}
+	else
+	{
+		if (!GetDeviceByName(id.c_str(), dev))
+			return false;
+	}
+
+	std::ostringstream body;
+	body << R"(<u:GetPositionInfo xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID></u:GetPositionInfo>)";
+
+	std::string req = CreateSoapRequest(AvTransportEndPoint,
+		dev._address.c_str(), dev._port,
+		body.str().c_str(),
+		"urn:schemas-upnp-org:service:AVTransport:1#GetPositionInfo");
+
+	std::string resp;
+
+	bool success = NetworkRequest(dev._address.c_str(), dev._port, AvTransportEndPoint, resp, req.c_str());
+
+	// ### now parse the result - look for lots of elements! esp TrackURI
+
+	return success;
 }
 
 bool SonosInterface::MustEscape(char ch, std::string& escaped)
