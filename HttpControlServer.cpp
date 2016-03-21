@@ -105,6 +105,13 @@ std::vector<std::string> HttpControlServer::Split(const std::string& str, char d
 
 bool HttpControlServer::OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request)
 {
+	int vol;
+	bool muted;
+
+	SonosInterface::GetInstance()->GetVolumeBlocking("Kitchen", false, vol);
+	SonosInterface::GetInstance()->GetMuteBlocking("Kitchen", false, muted);
+	return false;
+
 	bool success = false;
 
 	std::vector<std::string> pathParts = Split(request.path, '/');

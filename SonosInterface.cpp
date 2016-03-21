@@ -1130,6 +1130,42 @@ bool SonosInterface::GetVolumeBlocking(std::string id, bool idIsUdn, int& volume
 
 	// ### now parse the result - look for <CurrentVolume>
 
+	int pos = resp.find("\r\n\r\n");
+
+	if (pos != std::string::npos)
+	{
+		tinyxml2::XMLDocument xmlDoc;
+
+		tinyxml2::XMLError ok = xmlDoc.Parse(resp.substr(pos+4).c_str());
+
+		if (ok != tinyxml2::XML_NO_ERROR)
+			return false;
+
+		tinyxml2::XMLElement* pElem = xmlDoc.FirstChildElement("s:Envelope");
+
+		if (!pElem)
+			return false;
+
+		pElem = pElem->FirstChildElement("s:Body");
+
+		if (!pElem)
+			return false;
+		
+		pElem = pElem->FirstChildElement("u:GetVolumeResponse");
+
+		if (!pElem)
+			return false;
+
+		pElem = pElem->FirstChildElement("CurrentVolume");
+
+		if (!pElem)
+			return false;
+
+		volume = atoi(pElem->GetText());
+		success = true;
+
+	}
+
 	return success;
 }
 
@@ -1156,7 +1192,7 @@ bool SonosInterface::GetMuteBlocking(std::string id, bool idIsUdn, bool& isMuted
 	std::string req = CreateSoapRequest(RenderingEndPoint,
 		dev._address.c_str(), dev._port,
 		body.str().c_str(),
-		"urn:schemas-upnp-org:service:RenderingControl:1#CurrentMute");
+		"urn:schemas-upnp-org:service:RenderingControl:1#GetMute");
 
 	std::string resp;
 
