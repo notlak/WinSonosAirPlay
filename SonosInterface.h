@@ -62,6 +62,8 @@ public:
 	static SonosInterface* GetInstance();
 	static void Delete();
 
+	enum class TransportState { Stopped, Playing, Paused, Transitioning };
+
 	void RegisterClient(SonosInterfaceClient* pClient) { _pClient = pClient; }
 
 	bool Init();
@@ -95,9 +97,9 @@ public:
 
 	bool GetVolumeBlocking(std::string id, bool idIsUdn, int& volume);
 	bool GetMuteBlocking(std::string id, bool idIsUdn, bool& isMuted);
-	bool GetTransportInfoBlocking(std::string id, bool idIsUdn, bool& tbd);
+	bool GetTransportInfoBlocking(std::string id, bool idIsUdn, TransportState& state);
+	bool GetMediaInfoBlocking(std::string id, bool idIsUdn, std::string& uri);
 	bool GetPositionInfoBlocking(std::string id, bool idIsUdn, bool& tbd);
-
 
 protected:
 

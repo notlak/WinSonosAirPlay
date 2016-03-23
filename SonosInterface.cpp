@@ -10,6 +10,7 @@
 #include <sstream>
 #include <algorithm>
 #include <thread>
+#include <regex>
 
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
@@ -1130,6 +1131,21 @@ bool SonosInterface::GetVolumeBlocking(std::string id, bool idIsUdn, int& volume
 
 	// ### now parse the result - look for <CurrentVolume>
 
+	// regex version
+
+	std::regex regex("<CurrentVolume>([0-9]+)</CurrentVolume>"); // note the parentheses that create a capture group
+	std::smatch matches;
+
+	bool found = std::regex_search(resp, matches, regex);
+
+	if (found && matches.size() > 1)
+	{
+		volume = std::stoi(matches[1]);
+		success = true;
+	}
+
+
+	/* XML version
 	int pos = resp.find("\r\n\r\n");
 
 	if (pos != std::string::npos)
@@ -1165,6 +1181,7 @@ bool SonosInterface::GetVolumeBlocking(std::string id, bool idIsUdn, int& volume
 		success = true;
 
 	}
+	*/
 
 	return success;
 }
@@ -1200,10 +1217,23 @@ bool SonosInterface::GetMuteBlocking(std::string id, bool idIsUdn, bool& isMuted
 
 	// ### now parse the result - look for <CurrentMute>
 
+	// regex version
+
+	std::regex regex("<CurrentMute>([0-9]+)</CurrentMute>"); // note the parentheses that create a capture group
+	std::smatch matches;
+
+	bool found = std::regex_search(resp, matches, regex);
+
+	if (found && matches.size() > 1)
+	{
+		isMuted = std::stoi(matches[1]) != 0;
+		success = true;
+	}
+
 	return success;
 }
 
-bool SonosInterface::GetTransportInfoBlocking(std::string id, bool idIsUdn, bool& tbd)
+bool SonosInterface::GetTransportInfoBlocking(std::string id, bool idIsUdn, TransportState& state)
 {
 	LOG("Sonos: GET TransportInfo from %s\n", id.c_str());
 
@@ -1233,6 +1263,81 @@ bool SonosInterface::GetTransportInfoBlocking(std::string id, bool idIsUdn, bool
 	bool success = NetworkRequest(dev._address.c_str(), dev._port, AvTransportEndPoint, resp, req.c_str());
 
 	// ### now parse the result - look for <CurrentTransportState>
+	// options are believed to be:
+	// STOPPED
+	// PLAYING
+	// PAUSED_PLAYBACK
+	// TRANSITIONING
+
+	std::regex regex("<CurrentTransportState>(.*)</CurrentTransportState>"); // note the parentheses that create a capture group
+	std::smatch matches;
+
+	bool found = std::regex_search(resp, matches, regex);
+
+	if (found && matches.size() > 1)
+	{
+		state = TransportState::Stopped;
+
+		if (matches[1] == "STOPPED")
+			state = TransportState::Stopped;
+		else if (matches[1] == "PLAYING")
+			state = TransportState::Playing;
+		else if (matches[1] == "PAUSED_PLAYBACK")
+			state = TransportState::Paused;
+		else if (matches[1] == "TRANSITIONING")
+			state = TransportState::Transitioning;
+		else
+			LOG("SonosInterface::GetTransportInfoBloacking() error: unknown TransportState %s\n", matches[1].str().c_str());
+		
+		success = true;
+	}
+
+	return success;
+}
+
+bool SonosInterface::GetMediaInfoBlocking(std::string id, bool idIsUdn, std::string& uri)
+{
+	LOG("Sonos: GET MediaInfo from %s\n", id.c_str());
+
+	SonosDevice dev;
+
+	if (idIsUdn)
+	{
+		if (!GetDeviceByUdn(id.c_str(), dev))
+			return false;
+	}
+	else
+	{
+		if (!GetDeviceByName(id.c_str(), dev))
+			return false;
+	}
+
+	std::ostringstream body;
+	body << R"(<u:GetMediaInfo xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID></u:GetMediaInfo>)";
+
+	std::string req = CreateSoapRequest(AvTransportEndPoint,
+		dev._address.c_str(), dev._port,
+		body.str().c_str(),
+		"urn:schemas-upnp-org:service:AVTransport:1#GetMediaInfo");
+
+	std::string resp;
+
+	bool success = NetworkRequest(dev._address.c_str(), dev._port, AvTransportEndPoint, resp, req.c_str());
+
+	// ### now parse the result - look for <CurrentURI>
+
+	// regex version
+
+	std::regex regex("<CurrentURI>(.*)</CurrentURI>"); // note the parentheses that create a capture group
+	std::smatch matches;
+
+	bool found = std::regex_search(resp, matches, regex);
+
+	if (found && matches.size() > 1)
+	{
+		uri = std::stoi(matches[1]) != 0;
+		success = true;
+	}
 
 	return success;
 }
