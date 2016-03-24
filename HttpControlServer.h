@@ -26,8 +26,18 @@ public:
 
 protected:
 
+	// command handling methods
 	bool OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnPauseCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnStopCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnTestCommand(NetworkServerConnection& connection, NetworkRequest& request);
+
+	// method to handle request from sonos
 	bool OnServeTts(NetworkServerConnection& connection, NetworkRequest& request);
+	
+	void SendGoodResponse(NetworkServerConnection& connection, const std::string& body);
+	void SendBadResponse(NetworkServerConnection& connection, const std::string& body);
+
 	std::vector<std::string> Split(const std::string& str, char delimiter);
 
 	std::string UnescapeText(const std::string& text);

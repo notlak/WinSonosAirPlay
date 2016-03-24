@@ -43,25 +43,31 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 
 	if (request.path.substr(0, 5) == "/say/") // command for text to speech via Sonos
 	{
-		NetworkResponse resp("HTTP/1.0", 200, "OK");
-
 		if (!OnSayCommand(connection, request))
-		{
-			resp.responseCode = 500;
-			resp.reason = "Internal Server Error";
-			resp.AddHeaderField("Content-Type", "text/plain");
-			std::string body = "Error";
-			resp.AddContent(body.c_str(), body.size());
-			connection.SendResponse(resp, true);
-		}
+			SendBadResponse(connection, "Error");
 		else
-		{
-			resp.AddHeaderField("Content-Type", "text/plain");
-			std::string body = "OK";
-			resp.AddContent(body.c_str(), body.size());
-			connection.SendResponse(resp, true);
-		}
-
+			SendGoodResponse(connection, "OK");
+	}
+	else if (request.path.substr(0, 7) == "/pause/")
+	{
+		if (!OnPauseCommand(connection, request))
+			SendBadResponse(connection, "Error");
+		else
+			SendGoodResponse(connection, "OK");
+	}
+	else if (request.path.substr(0, 6) == "/stop/")
+	{
+		if (!OnStopCommand(connection, request))
+			SendBadResponse(connection, "Error");
+		else
+			SendGoodResponse(connection, "OK");
+	}
+	else if (request.path.substr(0, 6) == "/test/")
+	{
+		if (!OnTestCommand(connection, request))
+			SendBadResponse(connection, "Error");
+		else
+			SendGoodResponse(connection, "OK");
 	}
 	else if (request.path.substr(0, 5) == "/tts/") // sonos requesting mp3 text to speech audio
 	{
@@ -69,11 +75,7 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 	}
 	else
 	{
-		NetworkResponse resp("HTTP/1.0", 200, "OK");
-		resp.AddHeaderField("Content-Type", "text/html");
-		std::string body = "<html><body>HttpControlServer</body></html>";
-		resp.AddContent(body.c_str(), body.size());
-		connection.SendResponse(resp, true);
+		SendGoodResponse(connection, "Sonos HTTP Control Server");
 	}
 }
 
@@ -105,13 +107,6 @@ std::vector<std::string> HttpControlServer::Split(const std::string& str, char d
 
 bool HttpControlServer::OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	int vol;
-	bool muted;
-
-	SonosInterface::GetInstance()->GetVolumeBlocking("Kitchen", false, vol);
-	SonosInterface::GetInstance()->GetMuteBlocking("Kitchen", false, muted);
-	return false;
-
 	bool success = false;
 
 	std::vector<std::string> pathParts = Split(request.path, '/');
@@ -205,6 +200,65 @@ bool HttpControlServer::OnSayCommand(NetworkServerConnection& connection, Networ
 	return success;
 }
 
+bool HttpControlServer::OnPauseCommand(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	bool success = false;
+
+	std::vector<std::string> pathParts = Split(request.path, '/');
+
+	// we're here because request.path[0..6] = '/pause/'
+
+	if (request.type == "GET" && pathParts.size() > 1)
+	{
+		std::string speaker = pathParts[1]; // 0 will be "pause"
+
+		// speaker "ALL" = all speakers
+
+		success = SonosInterface::GetInstance()->PauseBlocking(speaker);
+	}
+	else
+	{
+		// ### todo: POST
+	}
+
+	return success;
+}
+
+bool HttpControlServer::OnStopCommand(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	bool success = false;
+
+	std::vector<std::string> pathParts = Split(request.path, '/');
+
+	// we're here because request.path[0..5] = '/stop/'
+
+	if (request.type == "GET" && pathParts.size() > 1)
+	{
+		std::string speaker = pathParts[1]; // 0 will be "stop"
+											// speaker "ALL" = all speakers
+
+		success = SonosInterface::GetInstance()->StopBlocking(speaker);
+	}
+	else
+	{
+		// ### todo: POST
+	}
+
+	return success;
+}
+
+bool HttpControlServer::OnTestCommand(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	int vol;
+	bool muted;
+
+	SonosInterface::GetInstance()->GetVolumeBlocking("Kitchen", vol);
+	SonosInterface::GetInstance()->GetMuteBlocking("Kitchen", muted);
+
+	return true;
+}
+
+
 bool HttpControlServer::OnServeTts(NetworkServerConnection& connection, NetworkRequest& request)
 {
 	// we're here because request.path[0..4] = '/tts/'
@@ -240,6 +294,23 @@ bool HttpControlServer::OnServeTts(NetworkServerConnection& connection, NetworkR
 	connection.SendResponse(resp);
 
 	return true;
+}
+
+
+void HttpControlServer::SendGoodResponse(NetworkServerConnection& connection, const std::string& body)
+{
+	NetworkResponse resp("HTTP/1.0", 200, "OK");
+	resp.AddHeaderField("Content-Type", "text/plain");
+	resp.AddContent(body.c_str(), body.size());
+	connection.SendResponse(resp, true);
+}
+
+void HttpControlServer::SendBadResponse(NetworkServerConnection& connection, const std::string& body)
+{
+	NetworkResponse resp("HTTP/1.0", 500, "Internal Server Error");
+	resp.AddHeaderField("Content-Type", "text/plain");
+	resp.AddContent(body.c_str(), body.size());
+	connection.SendResponse(resp, true);
 }
 
 std::string HttpControlServer::UnescapeText(const std::string& text)

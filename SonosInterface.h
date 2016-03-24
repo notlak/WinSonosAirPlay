@@ -90,18 +90,20 @@ public:
 	bool PlayUriBlocking(std::string udn, std::string uri, std::string title);
 	bool SetAvTransportUriBlocking(std::string udn, std::string uri, std::string title);
 	bool PlayBlocking(std::string udn);
-	bool PauseBlocking(std::string udn);
-	bool StopBlocking(std::string udn);
+	bool PauseBlocking(std::string id);
+	bool StopBlocking(std::string id);
 
 	bool PlayFileFromServerBlocking(std::string room, std::string uri, std::string title);
 
-	bool GetVolumeBlocking(std::string id, bool idIsUdn, int& volume);
-	bool GetMuteBlocking(std::string id, bool idIsUdn, bool& isMuted);
-	bool GetTransportInfoBlocking(std::string id, bool idIsUdn, TransportState& state);
-	bool GetMediaInfoBlocking(std::string id, bool idIsUdn, std::string& uri);
-	bool GetPositionInfoBlocking(std::string id, bool idIsUdn, bool& tbd);
+	bool GetVolumeBlocking(std::string id, int& volume);
+	bool GetMuteBlocking(std::string id, bool& isMuted);
+	bool GetTransportInfoBlocking(std::string id, TransportState& state);
+	bool GetMediaInfoBlocking(std::string id, std::string& uri);
+	bool GetPositionInfoBlocking(std::string id, bool& tbd);
 
 protected:
+
+	bool DoForEachDevice(std::function<bool(std::string)> f);
 
 	std::string FormatMetaData(const char* pTitle);
 	bool MustEscape(char ch, std::string& escaped);
@@ -112,6 +114,7 @@ protected:
 	bool IsDeviceInList(const char* pUdn);
 	bool GetDeviceByUdn(const char* pUdn, SonosDevice& device);
 	bool GetDeviceByName(const char* pName, SonosDevice& device);
+	bool GetDeviceByNameOrUdn(const std::string& id, SonosDevice& device);
 	void UpdateDeviceRecord(const SonosDevice& dev);
 
 	std::string CreateSoapRequest(const char* endPoint, const char* host, int port, const char* body, const char* action);

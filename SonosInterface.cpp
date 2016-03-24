@@ -863,6 +863,28 @@ bool SonosInterface::GetDeviceByName(const char* pName, SonosDevice& device)
 	return found;
 }
 
+bool SonosInterface::GetDeviceByNameOrUdn(const std::string& id, SonosDevice& device)
+{
+	bool found = false;
+	bool isUdn = false;
+
+	if (id.size() > 5 && id.substr(0, 5) == "uuid:")
+		isUdn = true;
+
+	std::lock_guard<std::mutex> lock(_listMutex);
+
+	for (std::list<SonosDevice>::iterator it = _deviceList.begin(); it != _deviceList.end() && !found; it++)
+	{
+		if ((isUdn && it->_udn == id) || (!isUdn && it->_name == id))
+		{
+			device = *it;
+			found = true;
+		}
+	}
+
+	return found;
+}
+
 void SonosInterface::UpnpDeviceAdded(const char* pUdn, const char* pUrl)
 {
 	//if (!IsDeviceInList(pUdn))
@@ -968,13 +990,22 @@ bool SonosInterface::PlayBlocking(std::string udn)
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
 }
 
-bool SonosInterface::PauseBlocking(std::string udn)
+bool SonosInterface::PauseBlocking(std::string id)
 {
-	LOG("Sonos: PAUSE -> %s\n", udn.c_str());
+	LOG("Sonos: PAUSE -> %s\n", id.c_str());
+
+	if (id.empty() || id == "ALL")
+	{
+		DoForEachDevice([this](std::string u) {return StopBlocking(u); });
+
+		//DoForEachDevice(std::bind(&SonosInterface::StopBlocking, this));
+
+		return true;
+	}
 
 	SonosDevice dev;
 
-	if (!GetDeviceByUdn(udn.c_str(), dev))
+	if (!GetDeviceByNameOrUdn(id, dev))
 		return false;
 
 	std::string req = CreateSoapRequest(AvTransportEndPoint,
@@ -987,13 +1018,22 @@ bool SonosInterface::PauseBlocking(std::string udn)
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
 }
 
-bool SonosInterface::StopBlocking(std::string udn)
+bool SonosInterface::StopBlocking(std::string id)
 {
-	LOG("Sonos: STOP -> %s\n", udn.c_str());
+	LOG("Sonos: STOP -> %s\n", id.c_str());
 
+	if (id.empty() || id == "ALL")
+	{
+		DoForEachDevice( [this](std::string u) {return StopBlocking(u);} );
+
+		//DoForEachDevice(std::bind(&SonosInterface::StopBlocking, this));
+
+		return true;
+	}
+	
 	SonosDevice dev;
 
-	if (!GetDeviceByUdn(udn.c_str(), dev))
+	if (!GetDeviceByNameOrUdn(id, dev))
 		return false;
 
 	std::string req = CreateSoapRequest(AvTransportEndPoint,
@@ -1038,12 +1078,19 @@ bool SonosInterface::PlayFileFromServerBlocking(std::string speaker, std::string
 
 	if (speaker == "ALL") // play on every speaker
 	{
-		std::lock_guard<std::mutex> lock(_listMutex);
-
-		for (SonosDevice& d : _deviceList)
+		std::vector<std::string> deviceList;
 		{
-			success = PlayUriBlocking(d._udn, uri, title);
+			std::lock_guard<std::mutex> lock(_listMutex);
+
+			for (SonosDevice& d : _deviceList)
+			{
+				if (!d._udn.empty() && d._udn != "ALL" && d._isCoordinator)
+					deviceList.push_back(d._udn);
+			}
 		}
+
+		for (std::string& u : deviceList)
+			PlayUriBlocking(u, uri, title);
 	}
 	else
 	{
@@ -1100,22 +1147,14 @@ bool SonosInterface::SetAvTransportUriBlocking(std::string udn, std::string uri,
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
 }
 
-bool SonosInterface::GetVolumeBlocking(std::string id, bool idIsUdn, int& volume)
+bool SonosInterface::GetVolumeBlocking(std::string id, int& volume)
 {
 	LOG("Sonos: GET VOLUME from %s\n", id.c_str());
 
 	SonosDevice dev;
 
-	if (idIsUdn)
-	{
-		if (!GetDeviceByUdn(id.c_str(), dev))
-			return false;
-	}
-	else
-	{
-		if (!GetDeviceByName(id.c_str(), dev))
-			return false;
-	}
+	if (!GetDeviceByNameOrUdn(id, dev))
+		return false;
 
 	std::ostringstream body;
 	body << R"(<u:GetVolume xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1"><InstanceID>0</InstanceID><Channel>Master</Channel></u:GetVolume>)";
@@ -1186,22 +1225,14 @@ bool SonosInterface::GetVolumeBlocking(std::string id, bool idIsUdn, int& volume
 	return success;
 }
 
-bool SonosInterface::GetMuteBlocking(std::string id, bool idIsUdn, bool& isMuted)
+bool SonosInterface::GetMuteBlocking(std::string id, bool& isMuted)
 {
 	LOG("Sonos: GET MUTE from %s\n", id.c_str());
 
 	SonosDevice dev;
 
-	if (idIsUdn)
-	{
-		if (!GetDeviceByUdn(id.c_str(), dev))
+		if (!GetDeviceByNameOrUdn(id, dev))
 			return false;
-	}
-	else
-	{
-		if (!GetDeviceByName(id.c_str(), dev))
-			return false;
-	}
 
 	std::ostringstream body;
 	body << R"(<u:GetMute xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1"><InstanceID>0</InstanceID><Channel>Master</Channel></u:GetMute>)";
@@ -1233,22 +1264,14 @@ bool SonosInterface::GetMuteBlocking(std::string id, bool idIsUdn, bool& isMuted
 	return success;
 }
 
-bool SonosInterface::GetTransportInfoBlocking(std::string id, bool idIsUdn, TransportState& state)
+bool SonosInterface::GetTransportInfoBlocking(std::string id, TransportState& state)
 {
 	LOG("Sonos: GET TransportInfo from %s\n", id.c_str());
 
 	SonosDevice dev;
-
-	if (idIsUdn)
-	{
-		if (!GetDeviceByUdn(id.c_str(), dev))
-			return false;
-	}
-	else
-	{
-		if (!GetDeviceByName(id.c_str(), dev))
-			return false;
-	}
+	
+	if (!GetDeviceByNameOrUdn(id.c_str(), dev))
+		return false;
 
 	std::ostringstream body;
 	body << R"(<u:GetTransportInfo xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID></u:GetTransportInfo>)";
@@ -1267,7 +1290,7 @@ bool SonosInterface::GetTransportInfoBlocking(std::string id, bool idIsUdn, Tran
 	// STOPPED
 	// PLAYING
 	// PAUSED_PLAYBACK
-	// TRANSITIONING
+	// TRANSITIONINGp
 
 	std::regex regex("<CurrentTransportState>(.*)</CurrentTransportState>"); // note the parentheses that create a capture group
 	std::smatch matches;
@@ -1295,22 +1318,14 @@ bool SonosInterface::GetTransportInfoBlocking(std::string id, bool idIsUdn, Tran
 	return success;
 }
 
-bool SonosInterface::GetMediaInfoBlocking(std::string id, bool idIsUdn, std::string& uri)
+bool SonosInterface::GetMediaInfoBlocking(std::string id, std::string& uri)
 {
 	LOG("Sonos: GET MediaInfo from %s\n", id.c_str());
 
 	SonosDevice dev;
 
-	if (idIsUdn)
-	{
-		if (!GetDeviceByUdn(id.c_str(), dev))
-			return false;
-	}
-	else
-	{
-		if (!GetDeviceByName(id.c_str(), dev))
-			return false;
-	}
+	if (!GetDeviceByNameOrUdn(id, dev))
+		return false;
 
 	std::ostringstream body;
 	body << R"(<u:GetMediaInfo xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID></u:GetMediaInfo>)";
@@ -1342,22 +1357,14 @@ bool SonosInterface::GetMediaInfoBlocking(std::string id, bool idIsUdn, std::str
 	return success;
 }
 
-bool SonosInterface::GetPositionInfoBlocking(std::string id, bool idIsUdn, bool& tbd)
+bool SonosInterface::GetPositionInfoBlocking(std::string id, bool& tbd)
 {
 	LOG("Sonos: GET PositionInfo from %s\n", id.c_str());
 
 	SonosDevice dev;
 
-	if (idIsUdn)
-	{
-		if (!GetDeviceByUdn(id.c_str(), dev))
-			return false;
-	}
-	else
-	{
-		if (!GetDeviceByName(id.c_str(), dev))
-			return false;
-	}
+	if (!GetDeviceByNameOrUdn(id, dev))
+		return false;
 
 	std::ostringstream body;
 	body << R"(<u:GetPositionInfo xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID></u:GetPositionInfo>)";
@@ -1374,6 +1381,28 @@ bool SonosInterface::GetPositionInfoBlocking(std::string id, bool idIsUdn, bool&
 	// ### now parse the result - look for lots of elements! esp TrackURI
 
 	return success;
+}
+
+bool SonosInterface::DoForEachDevice(std::function<bool(std::string)> f)
+{
+	// we can't multiply lock the mutex so create a list of devices
+	// then call the function on each one in turn
+
+	std::vector<std::string> deviceList;
+	{
+		std::lock_guard<std::mutex> lock(_listMutex);
+
+		for (SonosDevice& d : _deviceList)
+		{
+			if (!d._udn.empty() && d._udn != "ALL" && d._isCoordinator)
+				deviceList.push_back(d._udn);
+		}
+	}
+
+	for (std::string& u : deviceList)
+		f(u);
+
+	return true;
 }
 
 bool SonosInterface::MustEscape(char ch, std::string& escaped)
