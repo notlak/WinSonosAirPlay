@@ -4,6 +4,7 @@
 #include "SonosInterface.h"
 #include <openssl\sha.h>
 #include <sstream>
+#include <fstream>
 #include <iomanip>
 
 HttpControlServer::HttpControlServer()
@@ -41,7 +42,11 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 	LOG("HttpControlServer::OnRequest() type:[%s] path:[%s] protocol:[%s]\n", 
 		request.type.c_str(), request.path.c_str(), request.protocol.c_str());
 
-	if (request.path.substr(0, 5) == "/say/") // command for text to speech via Sonos
+	if (request.path.substr(0, 7) == "/saygui") // web page for TTS
+	{
+		OnSayGui(connection, request);
+	}
+	else if (request.path.substr(0, 5) == "/say/") // command for text to speech via Sonos
 	{
 		NetworkResponse resp("HTTP/1.0", 200, "OK");
 
@@ -103,14 +108,38 @@ std::vector<std::string> HttpControlServer::Split(const std::string& str, char d
 	return segments;
 }
 
+bool HttpControlServer::OnSayGui(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	std::ifstream fs("http\\TTS.html");
+	NetworkResponse resp("HTTP/1.0", 200, "OK");
+
+	if (fs.bad())
+	{
+		resp.responseCode = 404;
+		resp.reason = "Not Found";
+		connection.SendResponse(resp, true);
+		return false;
+	}
+
+	std::stringstream s;
+
+	s << fs.rdbuf();
+
+	resp.AddHeaderField("Content-Type", "text/html");
+	resp.AddContent(s.str().c_str(), s.str().length());
+	connection.SendResponse(resp, true);
+
+	return true;
+}
+
 bool HttpControlServer::OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	int vol;
-	bool muted;
+	//int vol;
+	//bool muted;
 
-	SonosInterface::GetInstance()->GetVolumeBlocking("Kitchen", false, vol);
-	SonosInterface::GetInstance()->GetMuteBlocking("Kitchen", false, muted);
-	return false;
+	//SonosInterface::GetInstance()->GetVolumeBlocking("Kitchen", false, vol);
+	//SonosInterface::GetInstance()->GetMuteBlocking("Kitchen", false, muted);
+	//return false;
 
 	bool success = false;
 

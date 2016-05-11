@@ -135,14 +135,6 @@ NetworkServerConnection::~NetworkServerConnection()
 	if (!_closeConnection)
 		Close();
 
-	while (_txQueue.size() > 0)
-	{
-		delete _txQueue.front();
-		_txQueue.pop_front();
-	}
-
-	delete[] _pRxBuff;
-
 	if (_pReadThread && _pReadThread->joinable())
 		_pReadThread->join();
 
@@ -152,6 +144,14 @@ NetworkServerConnection::~NetworkServerConnection()
 	delete _pReadThread;
 	
 	delete _pTransmitThread;
+
+	while (_txQueue.size() > 0)
+	{
+		delete _txQueue.front();
+		_txQueue.pop_front();
+	}
+
+	delete[] _pRxBuff;
 }
 
 bool NetworkServerConnection::Initialise(int connectionId)

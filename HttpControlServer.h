@@ -25,7 +25,7 @@ public:
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request);
 
 protected:
-
+	bool OnSayGui(NetworkServerConnection& connection, NetworkRequest& request);
 	bool OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request);
 	bool OnServeTts(NetworkServerConnection& connection, NetworkRequest& request);
 	std::vector<std::string> Split(const std::string& str, char delimiter);
