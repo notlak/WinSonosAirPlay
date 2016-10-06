@@ -25,8 +25,7 @@ public:
 	virtual void OnRequest(NetworkServerConnection& connection, NetworkRequest& request);
 
 protected:
-
-	// command handling methods
+	bool OnSayGui(NetworkServerConnection& connection, NetworkRequest& request);
 	bool OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request);
 	bool OnPauseCommand(NetworkServerConnection& connection, NetworkRequest& request);
 	bool OnStopCommand(NetworkServerConnection& connection, NetworkRequest& request);

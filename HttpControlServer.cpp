@@ -4,6 +4,7 @@
 #include "SonosInterface.h"
 #include <openssl\sha.h>
 #include <sstream>
+#include <fstream>
 #include <iomanip>
 
 HttpControlServer::HttpControlServer()
@@ -41,7 +42,11 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 	LOG("HttpControlServer::OnRequest() type:[%s] path:[%s] protocol:[%s]\n", 
 		request.type.c_str(), request.path.c_str(), request.protocol.c_str());
 
-	if (request.path.substr(0, 5) == "/say/") // command for text to speech via Sonos
+	if (request.path.substr(0, 7) == "/saygui") // web page for TTS
+	{
+		OnSayGui(connection, request);
+	}
+	else if (request.path.substr(0, 5) == "/say/") // command for text to speech via Sonos
 	{
 		if (!OnSayCommand(connection, request))
 			SendBadResponse(connection, "Error");
@@ -49,12 +54,12 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 			SendGoodResponse(connection, "OK");
 	}
 	else if (request.path.substr(0, 7) == "/pause/")
-	{
+		{
 		if (!OnPauseCommand(connection, request))
 			SendBadResponse(connection, "Error");
 		else
 			SendGoodResponse(connection, "OK");
-	}
+		}
 	else if (request.path.substr(0, 6) == "/stop/")
 	{
 		if (!OnStopCommand(connection, request))
@@ -63,7 +68,7 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 			SendGoodResponse(connection, "OK");
 	}
 	else if (request.path.substr(0, 6) == "/test/")
-	{
+		{
 		if (!OnTestCommand(connection, request))
 			SendBadResponse(connection, "Error");
 		else
@@ -103,6 +108,30 @@ std::vector<std::string> HttpControlServer::Split(const std::string& str, char d
 		segments.push_back(str.substr(lastPos));
 
 	return segments;
+}
+
+bool HttpControlServer::OnSayGui(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	std::ifstream fs("http\\TTS.html");
+	NetworkResponse resp("HTTP/1.0", 200, "OK");
+
+	if (fs.bad())
+	{
+		resp.responseCode = 404;
+		resp.reason = "Not Found";
+		connection.SendResponse(resp, true);
+		return false;
+	}
+
+	std::stringstream s;
+
+	s << fs.rdbuf();
+
+	resp.AddHeaderField("Content-Type", "text/html");
+	resp.AddContent(s.str().c_str(), s.str().length());
+	connection.SendResponse(resp, true);
+
+	return true;
 }
 
 bool HttpControlServer::OnSayCommand(NetworkServerConnection& connection, NetworkRequest& request)
