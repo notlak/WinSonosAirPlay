@@ -183,7 +183,10 @@ void RtspServer::HandleOptions(NetworkServerConnection& connection, NetworkReque
 		resp.AddHeaderField("Apple-Response", b64AppleResp);
 
 		delete[] b64AppleResp;
-
+	}
+	else
+	{
+		LOG("RTSPServer: OPTIONS request has no Apple-Challenge\n");
 	}
 
 	connection.SendResponse(resp);
