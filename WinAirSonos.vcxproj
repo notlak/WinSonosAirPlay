@@ -158,6 +158,8 @@
       <GenerateDebugInformation>No</GenerateDebugInformation>
       <AdditionalLibraryDirectories>c:\program files\bonjour sdk\lib;..\openssl\lib;..\libalac\$(Platform)\$(Configuration);..\libmp3lame</AdditionalLibraryDirectories>
       <AdditionalDependencies>libmp3lame.lib;libeay32.lib;libalac.lib;win32\dnssd.lib;ws2_32.lib;comsuppwd.lib;advapi32.lib;gdi32.lib</AdditionalDependencies>
+      <FullProgramDatabaseFile>false</FullProgramDatabaseFile>
+      <AssemblyDebug>false</AssemblyDebug>
     </Link>
     <Midl>
       <MkTypLibCompatible>false</MkTypLibCompatible>

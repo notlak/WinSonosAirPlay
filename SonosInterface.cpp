@@ -289,6 +289,12 @@ bool SonosInterface::StartAsyncSearch()
 
 				if (SUCCEEDED(hr))
 					ok = true;
+				else
+					LOG("SonosInterface: StartAsyncFind() failed");
+			}
+			else
+			{
+				LOG("SonosInterface: CreateAsyncFind() failed");
 			}
 		}
 		else
@@ -300,7 +306,6 @@ bool SonosInterface::StartAsyncSearch()
 	{
 		_pUPnPDeviceFinderCallback->Release();
 	}
-
 
 	return ok;
 }
