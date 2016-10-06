@@ -2,6 +2,7 @@
 #include "SonosInterface.h"
 #include "tinyxml2.h"
 #include "Log.h"
+#include "UdpSocket.h"
 
 #include <comutil.h>
 #include <winsock2.h>
@@ -20,9 +21,13 @@
 //#define new DEBUG_NEW
 //#endif
 
+//#define MS_UPNP
+
 const char* AvTransportEndPoint = "/MediaRenderer/AVTransport/Control";
 const char* RenderingEndPoint = "/MediaRenderer/RenderingControl/Control";
 
+
+//#ifdef MS_UPNP
 ///////////////////////////////////////////////////////////////////////////////
 // CUPnPDeviceFinderCallback implements IUPnPDeviceFinderCallback
 ///////////////////////////////////////////////////////////////////////////////
@@ -160,6 +165,8 @@ private:
 	SonosInterface* m_pSonosInt;
 };
 
+//#endif // MS_UPNP
+
 ///////////////////////////////////////////////////////////////////////////////
 // SonosInterface implementation
 ///////////////////////////////////////////////////////////////////////////////
@@ -218,6 +225,8 @@ bool SonosInterface::Init()
 	return true;
 }
 
+#ifdef MS_UPNP
+
 void SonosInterface::SearchThread()
 {
 	DWORD lastSearchTime = 0;
@@ -258,8 +267,157 @@ void SonosInterface::SearchThread()
 		Sleep(500);
 	}
 
+	DWORD lastPing = 0;
+	int bytesRead = 0;
+	const int MaxRxBytes = 2048;
+	char rxBuff[MaxRxBytes];
+
+	while (!_shutdown)
+	{
+		DWORD now = GetTickCount();
+
+		if (now - lastPing > 20000)
+		{
+			if (bcSock.Broadcast(1900, SsdpSearch, strlen(SsdpSearch)))
+				LOG("Sent SSDP Search\n");
+			else
+				LOG("SSDP send failed\n");
+
+			lastPing = now;
+		}
+		
+		bytesRead = bcSock.Read(rxBuff, MaxRxBytes);
+
+		if (bytesRead > 0)
+		{
+			rxBuff[bytesRead] = '\0';
+			LOG(rxBuff);
+		}
+
+		Sleep(500);
+	}
+
 	CoUninitialize();
 
+}
+
+#else // using our UPNP SSDP implementation
+
+// Using the original MS UPNP COM api for speaker detection
+// stopped working on some machines. It may be a change to the
+// firmware or it could be due to installing VPN and/or VM network
+// interfaces. SSDP multicast packets were sent to 239.255.255.250
+// port 1900. These were observed in Wireshark but no responses were
+// seen. Broadcasting the same packets to 255.255.255.255:1900 does
+// seem to still work and respnses will be received directed to the src
+// address and port. This is what has now been implemented.
+
+void SonosInterface::SearchThread()
+{
+	const DWORD SearchInterval = 1 * 60 * 1000; //5 * 60 * 1000;
+
+	char* SsdpSearchPacket =
+		"M-SEARCH * HTTP/1.1\r\n"
+		"Host: 239.255.255.250:1900\r\n"
+		"ST: urn:schemas-upnp-org:device:ZonePlayer:1\r\n"
+		"Man: \"ssdp:discover\"\r\n"
+		"MX: 1\r\n\r\n";
+
+	const int SsdpPort = 1900;
+
+	DWORD lastSearchTime = 0;
+	CUdpSocket sock;
+	int bytesRead = 0;
+	const int MaxRxBytes = 2048;
+	char rxBuff[MaxRxBytes];
+
+	if (!sock.InitialiseBroadcastRx(-1))
+		LOG("SonosInterface::SearchThread() unable to initialise socket\n");
+
+	while (!_shutdown)
+	{
+		DWORD now = GetTickCount();
+
+		if (now - lastSearchTime > SearchInterval)
+		{
+			if (sock.Broadcast(SsdpPort, SsdpSearchPacket, strlen(SsdpSearchPacket)))
+				LOG("SonosInterface::SearchThread() sent SSDP search packet\n");
+			else
+				LOG("SonosInterface::SearchThread() send SSDP packet failed\n");
+
+			lastSearchTime = now;
+		}
+
+		bytesRead = sock.Read(rxBuff, MaxRxBytes);
+
+		if (bytesRead > 0)
+		{
+			rxBuff[bytesRead] = '\0';
+
+			HandleSsdpResponse(rxBuff);
+
+			LOG(rxBuff);
+		}
+
+		Sleep(500);
+	}
+
+	CoUninitialize();
+}
+#endif
+
+void SonosInterface::HandleSsdpResponse(const char* resp)
+{
+	std::string s = resp;
+
+	if (s.find("device:ZonePlayer:1") == std::string::npos)
+		return;
+
+	// get the device details URL
+
+	size_t start = s.find("LOCATION: ");
+
+	if (start == std::string::npos)
+	{
+		LOG("SonosInterface::HandleSsdpResponse() no LOCATION field\n");
+		return;
+	}
+
+	start += 10;
+
+	size_t end = s.find('\r', start);
+
+	if (end == std::string::npos)
+	{
+		LOG("SonosInterface::HandleSsdpResponse() no LOCATION field end\n");
+		return;
+	}
+	
+	std::string url = s.substr(start, end - start);
+
+	// get the unique device name
+
+	start = s.find("USN:");
+
+	if (start == std::string::npos)
+	{
+		LOG("SonosInterface::HandleSsdpResponse() no USN field\n");
+		return;
+	}
+
+	start += 4;
+
+	end = s.find("::", start);
+
+	if (end == std::string::npos)
+	{
+		LOG("SonosInterface::HandleSsdpResponse() no USN field end\n");
+		return;
+	}
+
+	std::string udn = s.substr(start, end - start);
+
+	UpnpDeviceAdded(udn.c_str(), url.c_str());
 }
 
 bool SonosInterface::StartAsyncSearch()

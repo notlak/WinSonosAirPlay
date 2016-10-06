@@ -125,6 +125,8 @@ protected:
 
 	void SearchThread();
 
+	void HandleSsdpResponse(const char* resp);
+
 	SonosInterfaceClient* _pClient;
 
 	std::thread* _pSearchThread;
