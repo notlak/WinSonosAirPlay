@@ -150,6 +150,7 @@ void CWinAirSonos::AdvertiseServer(std::string name, int port, unsigned char* pM
 
 	if (_sdRefMap.find(name) != _sdRefMap.end())
 	{
+		LOG("Stopping advertisement of %s\n", name.c_str());
 		DNSServiceRefDeallocate(_sdRefMap[name]);
 		_sdRefMap.erase(name);
 	}
@@ -254,6 +255,7 @@ void CWinAirSonos::OnDeviceNameChanged(const SonosDevice& dev, const std::string
 		{
 			if (it->first == oldName)
 			{
+				LOG("Stopping advertisement of %s\n", oldName.c_str());
 				DNSServiceRefDeallocate(it->second);
 				_sdRefMap.erase(it);
 				break;
@@ -319,6 +321,7 @@ void CWinAirSonos::OnDeviceRemoved(const SonosDevice& dev)
 
 		if (it != _sdRefMap.end())
 		{
+			LOG("Stopping advertisement of %s\n", dev._name.c_str());
 			DNSServiceRefDeallocate(it->second);
 			_sdRefMap.erase(it);
 		}

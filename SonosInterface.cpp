@@ -267,38 +267,7 @@ void SonosInterface::SearchThread()
 		Sleep(500);
 	}
 
-	DWORD lastPing = 0;
-	int bytesRead = 0;
-	const int MaxRxBytes = 2048;
-	char rxBuff[MaxRxBytes];
-
-	while (!_shutdown)
-	{
-		DWORD now = GetTickCount();
-
-		if (now - lastPing > 20000)
-		{
-			if (bcSock.Broadcast(1900, SsdpSearch, strlen(SsdpSearch)))
-				LOG("Sent SSDP Search\n");
-			else
-				LOG("SSDP send failed\n");
-
-			lastPing = now;
-		}
-		
-		bytesRead = bcSock.Read(rxBuff, MaxRxBytes);
-
-		if (bytesRead > 0)
-		{
-			rxBuff[bytesRead] = '\0';
-			LOG(rxBuff);
-		}
-
-		Sleep(500);
-	}
-
 	CoUninitialize();
-
 }
 
 #else // using our UPNP SSDP implementation
@@ -356,7 +325,7 @@ void SonosInterface::SearchThread()
 
 			HandleSsdpResponse(rxBuff);
 
-			LOG(rxBuff);
+			//LOG(rxBuff);
 		}
 
 		Sleep(500);
