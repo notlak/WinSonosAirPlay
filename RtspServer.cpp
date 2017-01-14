@@ -131,7 +131,6 @@ void RtspServer::OnRequest(NetworkServerConnection& connection, NetworkRequest& 
 
 void RtspServer::HandleOptions(NetworkServerConnection& connection, NetworkRequest& request)
 {
-	LOG("RTSPServer: Got OPTIONS request\n");
 
 	NetworkResponse resp("RTSP/1.0", 200, "OK");
 	resp.AddHeaderField("Public", "OPTIONS, ANNOUNCE, SETUP, RECORD, PAUSE, FLUSH, TEARDOWN, GET_PARAMETER, SET_PARAMETER");
@@ -145,6 +144,8 @@ void RtspServer::HandleOptions(NetworkServerConnection& connection, NetworkReque
 		memset(rawAppleResp, 0, 32);
 		size_t chLen = 0;
 		unsigned char* pChallenge = nullptr;
+
+		LOG("RTSPServer: Got OPTIONS request with APPLE-CHALLENGE\n");
 
 		Base64Decode(request.headerFieldMap["APPLE-CHALLENGE"].c_str(), &pChallenge, &chLen);
 
@@ -186,10 +187,12 @@ void RtspServer::HandleOptions(NetworkServerConnection& connection, NetworkReque
 	}
 	else
 	{
-		LOG("RTSPServer: OPTIONS request has no Apple-Challenge\n");
+		LOG("RTSPServer: Got OPTIONS request\n");
 	}
 
+	LOG("HandleOptions() adding response to tx buffer\n");
 	connection.SendResponse(resp);
+	LOG("HandleOptions() entries: %d\n", connection.TransmitBufferEntries());
 }
 
 void RtspServer::HandleAnnounce(NetworkServerConnection& connection, NetworkRequest& request)
@@ -682,7 +685,6 @@ bool RtspServerConnection::RequestRetransmit(unsigned short seq, unsigned short 
 
 	//return SendUdpPacket(&_remoteAddr.sin_addr, _txControlPort, packet, RetransmitReqLen);
 }
-
 
 void RtspServerConnection::AudioThread()
 {

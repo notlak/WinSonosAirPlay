@@ -186,7 +186,8 @@ LOG("StreamingServer sending response to listen\n");
 
 				if (duration >= TimeOut)
 				{
-					LOG("StreamingServer::OnRequest() Error: timeout waiting for response to be sent\n");
+					LOG("StreamingServer::OnRequest() Error: timeout waiting for empty tx buffer\n");
+					LOG("StreamingServer::OnRequest() tx buffer entries:%d\n", connection.TransmitBufferEntries());
 				}
 				else // copy any data from the cache and signal that we can now send audio
 				{

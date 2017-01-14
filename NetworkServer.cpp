@@ -162,9 +162,16 @@ bool NetworkServerConnection::Initialise(int connectionId)
 
 	// start the threads
 
-	_pReadThread = new std::thread(&NetworkServerConnection::ReadThread, this);
-	_pTransmitThread = new std::thread(&NetworkServerConnection::TransmitThread, this);
+	// Have reordered to put the tx thread first in order to fix problem where
+	// iPhone tries to select an Airplay device but it times out after 1 min
+	// without having received a response. A response is definitely added to the
+	// tx buffer list but it is never sent - the condition_variable is never
+	// notified in TransmitThread() - this could be because the tx thread has not
+	// fulll started up by the time it is notified??
 
+	_pTransmitThread = new std::thread(&NetworkServerConnection::TransmitThread, this);
+	_pReadThread = new std::thread(&NetworkServerConnection::ReadThread, this);
+	
 	return true;
 }
 
@@ -341,7 +348,10 @@ void NetworkServerConnection::ReadThread()
 void NetworkServerConnection::Transmit(const char* pBuff, int len)
 {
 	if (len == 0)
+	{
+		LOG("NetworkServerConnection::Transmit() attempt to write 0 bytes\n");
 		return;
+	}
 
 	TransmitBuffer* pTxBuff = new TransmitBuffer(pBuff, len);
 
@@ -382,6 +392,8 @@ void NetworkServerConnection::TransmitThread()
 	{
 		std::unique_lock<std::mutex> lock(_transmitMutex);
 		_transmitCv.wait(lock); // this unlocks the mutex
+
+		bool transmitted = false;
 		
 		while (!_closeConnection && _txQueue.size() > 0)
 		{
@@ -394,6 +406,11 @@ tx:
 			{
 				int err = WSAGetLastError();
 				LOG("Error: unable to transmit data id:%d %d\n", _id, err);
+
+				// no point in continuing to attempt transmission if
+				// the connection has closed
+				if (WSAECONNABORTED == err || WSAECONNRESET == err)
+					_closeConnection = true;
 			}
 			else if (nBytes < pTxBuff->len)
 			{
@@ -401,6 +418,8 @@ tx:
 				ptr += nBytes;
 				goto tx;
 			}
+			
+			transmitted = true;
 
 			_txQueue.pop_front();
 			delete pTxBuff;
@@ -434,6 +453,9 @@ tx:
 			break;
 		}
 		*/
+
+		//if (transmitted)
+			//LOG("TransmitThread(): emptied tx queue\n");
 	}
 
 	LOG("Transmit thread complete port:%d\n", _closeAfterTx ? -1 :_pServer->GetPort());

@@ -19,6 +19,7 @@
 //#define new DEBUG_NEW
 //#endif
 
+//#define NO_ADVERTISE
 
 CWinAirSonos::CWinAirSonos()
 {
@@ -139,6 +140,11 @@ void CWinAirSonos::GenerateMac(const std::string& name, unsigned char* pMac)
 
 void CWinAirSonos::AdvertiseServer(std::string name, int port, unsigned char* pMac)
 {
+#ifdef NO_ADVERTISE
+#pragma message("!!! Advertisement turned off !!!")
+	return;
+#endif
+
 	DNSServiceRef sdRef;
 
 	std::ostringstream s;
@@ -517,6 +523,13 @@ int main()
 
 	DWORD lastStatsOutput = 0;
 
+	// After something changed - iOS 10/virtual machine on NUC/OpenVPN on NUC/
+	// router reset the mDNS entries aren't advertised properly after the initial
+	// minute or 2 or the query mechanism isn't working properly so we need to 
+	// continually re-advertise the speakers.
+	//const DWORD ReadvertisementInterval = 2.5 * 60 * 1000;
+	//DWORD lastReadvertisement = 0;
+
 	while (!quit)
 	{
 		Sleep(200);
@@ -540,6 +553,17 @@ int main()
 
 			lastStatsOutput = now;
 		}
+		/* No longer necessary - was a router problem
+		// don't immediately try to advertise as we won't have discovered any speakers yet
+		if (lastReadvertisement == 0)
+			lastReadvertisement = now;
+
+		if (now - lastReadvertisement > ReadvertisementInterval)
+		{
+			winAirSonos.ReadvertiseServers();
+			lastReadvertisement = now;
+		}
+		*/
 	}
 
 	winAirSonos.Shutdown();

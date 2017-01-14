@@ -68,7 +68,7 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 			SendGoodResponse(connection, "OK");
 	}
 	else if (request.path.substr(0, 6) == "/test/")
-		{
+	{
 		if (!OnTestCommand(connection, request))
 			SendBadResponse(connection, "Error");
 		else
@@ -77,6 +77,24 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 	else if (request.path.substr(0, 5) == "/tts/") // sonos requesting mp3 text to speech audio
 	{
 		OnServeTts(connection, request);
+	}
+	else if (request.path.substr(0, 6) == "/play/")
+	{
+		if (!OnPlayCommand(connection, request))
+			SendBadResponse(connection, "Error");
+		else
+			SendGoodResponse(connection, "OK");
+	}
+	else if (request.path.substr(0, 9) == "/playfav/")
+	{
+		if (!OnPlayFavCommand(connection, request))
+			SendBadResponse(connection, "Error");
+		else
+			SendGoodResponse(connection, "OK");
+	}
+	else if (request.path.substr(0, 12) == "/getdevices/")
+	{
+		OnGetDevicesCommand(connection, request);
 	}
 	else
 	{
@@ -276,15 +294,62 @@ bool HttpControlServer::OnStopCommand(NetworkServerConnection& connection, Netwo
 	return success;
 }
 
+bool HttpControlServer::OnPlayCommand(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	bool success = false;
+
+	std::vector<std::string> pathParts = Split(request.path, '/');
+
+	// we're here because request.path[0..5] = '/play/'
+
+	if (request.type == "GET" && pathParts.size() > 1)
+	{
+		std::string speaker = pathParts[1]; // 0 will be "stop"
+											// speaker "ALL" = all speakers
+
+		success = SonosInterface::GetInstance()->PlayBlocking(speaker);
+	}
+	else
+	{
+		// ### todo: POST
+	}
+
+	return success;
+}
+
+
 bool HttpControlServer::OnTestCommand(NetworkServerConnection& connection, NetworkRequest& request)
 {
 	int vol;
 	bool muted;
 
-	SonosInterface::GetInstance()->GetVolumeBlocking("Kitchen", vol);
-	SonosInterface::GetInstance()->GetMuteBlocking("Kitchen", muted);
+	//SonosInterface::GetInstance()->GetVolumeBlocking("Kitchen", vol);
+	//SonosInterface::GetInstance()->GetMuteBlocking("Kitchen", muted);
+
+	std::vector<std::string> pathParts = Split(request.path, '/');
+	SonosInterface::GetInstance()->GetFavouritesBlocking(pathParts[1]);
 
 	return true;
+}
+
+bool HttpControlServer::OnPlayFavCommand(NetworkServerConnection& connection, NetworkRequest& request)
+{
+
+	// request url will be /playfav/<room>/<name of favourite>
+	
+	std::vector<std::string> pathParts = Split(request.path, '/');
+
+	if (pathParts.size() < 3)
+		return false;
+
+	std::string fav = UnescapeText(pathParts[2]);
+
+	return SonosInterface::GetInstance()->PlayFavouriteBlocking(pathParts[1], fav);
+
+	//### todo
+
+	// to find track: AVTransport:GetPositionInfo action and look at TrackURI/TrackMetaData
+	// to find play state use: AvTransport:GetTransportInfo the look at CurrentTransportState and maybe CurrentTransportStatus
 }
 
 
@@ -319,6 +384,41 @@ bool HttpControlServer::OnServeTts(NetworkServerConnection& connection, NetworkR
 		resp.responseCode = 404;
 		resp.reason = "Not Found";
 	}
+
+	connection.SendResponse(resp);
+
+	return true;
+}
+
+bool HttpControlServer::OnGetDevicesCommand(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	// Get a list of devices from the SonosInterface and respond with a JSON object
+
+	std::stringstream json;
+
+	std::list<SonosDevice> devList;
+
+	SonosInterface::GetInstance()->GetListOfDevices(devList);
+
+	json << (R"({"devices": [)");
+
+	for (auto it = devList.begin(); it != devList.end(); ++it)
+	{
+		SonosDevice& dev = *it;
+
+		if (it != devList.begin())
+			json << ",";
+
+		json << "{" << R"("name": ")" << dev._name << R"(", )";
+		json << R"("id": ")" << dev._udn << R"(", )";
+		json << R"("address": ")" << dev._address << R"("})";
+	}
+
+	json << "]}";
+
+	NetworkResponse resp("HTTP/1.0", 200, "OK");
+	resp.AddHeaderField("Content-Type", "application/json");
+	resp.AddContent(json.str().c_str(), json.str().length());
 
 	connection.SendResponse(resp);
 

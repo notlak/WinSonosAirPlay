@@ -30,6 +30,9 @@ protected:
 	bool OnPauseCommand(NetworkServerConnection& connection, NetworkRequest& request);
 	bool OnStopCommand(NetworkServerConnection& connection, NetworkRequest& request);
 	bool OnTestCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnPlayFavCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnPlayCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnGetDevicesCommand(NetworkServerConnection& connection, NetworkRequest& request);
 
 	// method to handle request from sonos
 	bool OnServeTts(NetworkServerConnection& connection, NetworkRequest& request);

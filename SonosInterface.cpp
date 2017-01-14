@@ -25,6 +25,7 @@
 
 const char* AvTransportEndPoint = "/MediaRenderer/AVTransport/Control";
 const char* RenderingEndPoint = "/MediaRenderer/RenderingControl/Control";
+const char* ContentDirectoryEndPoint = "/MediaServer/ContentDirectory/Control";
 
 
 //#ifdef MS_UPNP
@@ -190,7 +191,7 @@ void SonosInterface::Delete()
 
 SonosInterface::SonosInterface()
 	: _pSearchThread(nullptr), _shutdown(false), _pClient(nullptr), 
-	_searching(false), _searchCompleted(false)
+	_searching(false), _searchCompleted(false), _lastFavUpdateTime(0)
 {
 }
 
@@ -309,6 +310,11 @@ void SonosInterface::SearchThread()
 
 		if (now - lastSearchTime > SearchInterval)
 		{
+			if (sock.Broadcast(SsdpPort, SsdpSearchPacket, strlen(SsdpSearchPacket)))
+				LOG("SonosInterface::SearchThread() sent SSDP search packet\n");
+			else
+				LOG("SonosInterface::SearchThread() send SSDP packet failed\n");
+
 			if (sock.Broadcast(SsdpPort, SsdpSearchPacket, strlen(SsdpSearchPacket)))
 				LOG("SonosInterface::SearchThread() sent SSDP search packet\n");
 			else
@@ -660,7 +666,7 @@ bool SonosInterface::NetworkRequest(const char* ip, int port, const char* path, 
 	//if (bc == SOCKET_ERROR) break;
 	closesocket(s);
 
-LOG("tb: %d\n", tb);
+//LOG("tb: %d\n", tb);
 
 	// analyse received data
 	if (tb > 0)
@@ -717,7 +723,7 @@ LOG("SonosInterface::NetworkRequest() bad response: %s\n", resp.c_str());
 		}
 	}
 
-LOG("Success: %d\n", success);
+//LOG("Success: %d\n", success);
 
 	return success;
 }
@@ -856,6 +862,15 @@ Connection: close
 
 			ParseUrl(pElem->Attribute("location"), dev._address, dev._port, path);
 
+			// get favourites
+			const DWORD FavUpdatePeriod = 5 * 60 * 1000;
+			DWORD now = GetTickCount();
+			if (now - _lastFavUpdateTime >= FavUpdatePeriod)
+			{
+				GetFavouritesBlocking(dev);
+				_lastFavUpdateTime = now;
+			}
+
 			if (!IsDeviceInList(dev._udn.c_str()))
 			{
 
@@ -913,35 +928,44 @@ Connection: close
 	return true;
 }
 
+// copies the current list of devices to list
+void SonosInterface::GetListOfDevices(std::list<SonosDevice>& list)
+{
+	// lock the list
+	std::lock_guard<std::mutex> lock(_listMutex);
+
+	list = _deviceList;
+}
+
 void SonosInterface::UpdateDeviceRecord(const SonosDevice& dev)
 {
 	for (auto it = _deviceList.begin(); it != _deviceList.end(); ++it)
 	{
-		if (dev._udn == it->_udn)
-		{
-			if (dev._address != it->_address)
-			{
-				it->_address = dev._address;
-				if (_pClient)
-					_pClient->OnDeviceAddressChanged(dev);
-			}
+if (dev._udn == it->_udn)
+{
+	if (dev._address != it->_address)
+	{
+		it->_address = dev._address;
+		if (_pClient)
+			_pClient->OnDeviceAddressChanged(dev);
+	}
 
-			if (dev._name != it->_name)
-			{
-				it->_name = dev._name;
-				if (_pClient)
-					_pClient->OnDeviceNameChanged(dev, it->_name);
-			}
+	if (dev._name != it->_name)
+	{
+		it->_name = dev._name;
+		if (_pClient)
+			_pClient->OnDeviceNameChanged(dev, it->_name);
+	}
 
-			if (dev._isCoordinator != it->_isCoordinator)
-			{
-				it->_isCoordinator = dev._isCoordinator;
-				if (_pClient)
-					_pClient->OnDeviceCoordinatorStatusChanged(dev);
-			}
+	if (dev._isCoordinator != it->_isCoordinator)
+	{
+		it->_isCoordinator = dev._isCoordinator;
+		if (_pClient)
+			_pClient->OnDeviceCoordinatorStatusChanged(dev);
+	}
 
-			break;
-		}
+	break;
+}
 	}
 
 }
@@ -1003,14 +1027,35 @@ bool SonosInterface::GetDeviceByNameOrUdn(const std::string& id, SonosDevice& de
 	if (id.size() > 5 && id.substr(0, 5) == "uuid:")
 		isUdn = true;
 
+	std::string name = id;
+
+	// ignore case of the name
+	if (!isUdn)
+		std::transform(name.begin(), name.end(), name.begin(), ::toupper);
+
 	std::lock_guard<std::mutex> lock(_listMutex);
 
 	for (std::list<SonosDevice>::iterator it = _deviceList.begin(); it != _deviceList.end() && !found; it++)
 	{
-		if ((isUdn && it->_udn == id) || (!isUdn && it->_name == id))
+
+		if (isUdn)
 		{
-			device = *it;
-			found = true;
+			if (it->_udn == id)
+			{
+				device = *it;
+				found = true;
+			}
+		}
+		else
+		{
+			std::string recName = it->_name;
+			transform(recName.begin(), recName.end(), recName.begin(), ::toupper);
+			
+			if (recName == name)
+			{
+				device = *it;
+				found = true;
+			}
 		}
 	}
 
@@ -1109,7 +1154,7 @@ bool SonosInterface::PlayBlocking(std::string udn)
 
 	SonosDevice dev;
 
-	if (!GetDeviceByUdn(udn.c_str(), dev))
+	if (!GetDeviceByNameOrUdn(udn.c_str(), dev))
 		return false;
 
 	std::string req = CreateSoapRequest(AvTransportEndPoint,
@@ -1120,6 +1165,33 @@ bool SonosInterface::PlayBlocking(std::string udn)
 	std::string resp;
 
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
+}
+
+bool SonosInterface::PlayFavouriteBlocking(std::string id, std::string fav)
+{
+	LOG("Sonos: PLAY FAVOURITE [%s] -> %s\n", fav.c_str(), id.c_str());
+
+	// look up the favourite but first make uppercase to do case insensitive match
+
+	std::transform(fav.begin(), fav.end(), fav.begin(), ::toupper);
+
+	SonosFavourite favRec;
+
+	// scope to lock the _favMap favourites container
+	{
+		std::lock_guard<std::mutex> lock(_listMutex);
+
+		auto it = _favMap.find(fav);
+		if (it == _favMap.end())
+			return false;
+
+		favRec = (*it).second;
+	}
+
+	// TODO: move the following EscapeXml() call to PlayUriBlocking() if this works
+	// ok
+
+	return PlayUriBlocking(id, EscapeXml(favRec._url), favRec._name);
 }
 
 bool SonosInterface::PauseBlocking(std::string id)
@@ -1263,7 +1335,7 @@ bool SonosInterface::SetAvTransportUriBlocking(std::string udn, std::string uri,
 	LOG("Sonos: URI %s -> %s\n", uri.c_str(), udn.c_str());
 	SonosDevice dev;
 
-	if (!GetDeviceByUdn(udn.c_str(), dev))
+	if (!GetDeviceByNameOrUdn(udn.c_str(), dev))
 		return false;
 
 	std::ostringstream body;
@@ -1515,6 +1587,176 @@ bool SonosInterface::GetPositionInfoBlocking(std::string id, bool& tbd)
 	return success;
 }
 
+bool SonosInterface::GetFavouritesBlocking(std::string id)
+{
+	SonosDevice dev;
+
+	if (!GetDeviceByNameOrUdn(id, dev))
+		return false;
+
+	return GetFavouritesBlocking(dev);
+}
+
+bool SonosInterface::GetFavouritesBlocking(const SonosDevice& dev)
+{
+	LOG("Sonos: GET Favourites from %s\n", dev._name.c_str());
+
+	/* Need to send the following:
+	< ? xml version = "1.0" encoding = "utf-8" ? >
+		<s:Envelope s : encodingStyle = "http://schemas.xmlsoap.org/soap/encoding/" xmlns : s = "http://schemas.xmlsoap.org/soap/envelope/">
+		<s:Body>
+		<u:Browse xmlns : u = "urn:schemas-upnp-org:service:ContentDirectory:1">
+		<ObjectID>FV:2< / ObjectID>
+		<BrowseFlag>BrowseDirectChildren< / BrowseFlag>
+		<Filter / >
+		<StartingIndex>0< / StartingIndex>
+		<RequestedCount>0< / RequestedCount>
+		<SortCriteria / >
+		< / u:Browse>
+		< / s:Body>
+		< / s:Envelope>
+		*/
+
+	std::ostringstream body;
+	body << R"(<u:Browse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1"><ObjectID>FV:2</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag><Filter/><StartingIndex>0</StartingIndex><RequestedCount>0</RequestedCount><SortCriteria/></u:Browse>)";
+
+	std::string req = CreateSoapRequest(ContentDirectoryEndPoint,
+		dev._address.c_str(), dev._port,
+		body.str().c_str(),
+		"urn:schemas-upnp-org:service:ContentDirectory:1#Browse");
+
+	std::string resp;
+
+	bool success = NetworkRequest(dev._address.c_str(), dev._port, ContentDirectoryEndPoint, resp, req.c_str());
+
+	if (!success)
+		return false;
+
+	resp = UnChunkEncode(resp);
+
+	// now parse the xml result
+
+	tinyxml2::XMLDocument xmlDoc;
+
+	int xmlStart = resp.find("<Result>");
+
+	if (xmlStart == std::string::npos)
+		return false;
+
+	std::string result = resp.substr(xmlStart);
+	result = UnescapeXml(result);
+
+	tinyxml2::XMLError ok = xmlDoc.Parse(result.c_str());
+
+	if (ok != tinyxml2::XML_NO_ERROR)
+		return false;
+
+	// the Browse result is included in a <Result> tag. The contents are html escaped
+	//tinyxml2::XMLElement* pElem = xmlDoc.FirstChildElement("Result");
+
+	tinyxml2::XMLElement* pElem = nullptr;
+
+	pElem = xmlDoc.FirstChildElement("Result");
+
+	if (!pElem)
+		return false;
+
+	pElem = pElem->FirstChildElement("DIDL-Lite");
+
+	if (!pElem)
+		return false;
+
+	pElem = pElem->FirstChildElement("item");
+
+	// clear the favourites map
+	{
+		std::lock_guard<std::mutex> lock(_listMutex);
+
+		_favMap.clear();
+
+		while (pElem)
+		{
+			tinyxml2::XMLElement* pTitle = pElem->FirstChildElement("dc:title");
+			tinyxml2::XMLElement* pRes = pElem->FirstChildElement("res");
+			tinyxml2::XMLElement* pMeta = pElem->FirstChildElement("r:resMD");
+			
+			SonosFavourite fav(pTitle->GetText(), pRes->GetText(), pMeta->GetText());
+
+			LOG("Favorite: %s [%s]\n", fav._name.c_str(), fav._url.c_str());
+
+			std::string upperFav = fav._name;
+			std::transform(upperFav.begin(), upperFav.end(), upperFav.begin(), ::toupper);
+
+			_favMap[upperFav] = fav; // make the map key uppercase for case insensitive searchesp
+
+			pElem = pElem->NextSiblingElement("item");
+		}
+
+	}
+	return success;
+}
+
+std::string SonosInterface::UnChunkEncode(std::string s)
+{
+	std::ostringstream stream;
+
+	// case insensitive find
+
+	const std::string field = "transfer-encoding";
+
+	auto it = std::search(
+		s.begin(), s.end(),
+		field.begin(), field.end(),
+		[](char ch1, char ch2) { return std::toupper(ch1) == std::toupper(ch2); }
+	);
+
+	if (it == s.end())
+		return s;
+
+	int startIndex = std::distance(s.begin(), it);
+
+	startIndex += 18; // string + ':'
+
+	int endIndex = s.find('\r', startIndex);
+
+	if (startIndex == std::string::npos || endIndex == std::string::npos)
+		return s;
+
+	std::string value = s.substr(startIndex, endIndex-startIndex);
+
+	if (value.find("chunked") == std::string::npos)
+		return s;
+
+	startIndex = s.find("\r\n\r\n"); // end of header
+
+	startIndex += 4;
+
+	while (s.find("\r\n\r\n", startIndex) != std::string::npos)
+	{
+		endIndex = s.find("\r\n", startIndex);
+
+		if (endIndex == std::string::npos)
+			break;
+
+		std::string lenStr = s.substr(startIndex, endIndex - startIndex);
+
+		std::stringstream hexStream;
+		int len;
+
+		hexStream << std::hex << lenStr;
+		hexStream >> len;
+
+		std::string chunk = s.substr(endIndex + 2, len);
+
+		stream << chunk;
+
+		startIndex = endIndex + 2 + len + 2;
+	}
+
+	return stream.str();
+}
+
+
 bool SonosInterface::DoForEachDevice(std::function<bool(std::string)> f)
 {
 	// we can't multiply lock the mutex so create a list of devices
@@ -1554,6 +1796,23 @@ bool SonosInterface::MustEscape(char ch, std::string& escaped)
 	return mustEscape;
 }
 
+std::string SonosInterface::EscapeXml(std::string& s)
+{
+	std::ostringstream esc;
+	std::string escaped;
+
+	for (int i = 0; i < (int)s.length(); i++)
+	{
+
+		if (MustEscape(s[i], escaped))
+			esc << escaped;
+		else
+			 esc << s[i];
+	}
+
+	return esc.str();
+}
+
 std::string SonosInterface::FormatMetaData(const char* pTitle)
 {
 	//std::string meta;
@@ -1589,6 +1848,81 @@ std::string SonosInterface::FormatMetaData(const char* pTitle)
 
 	return meta.str();
 }
+
+std::string SonosInterface::UnescapeXml(const std::string& s)
+{
+	std::ostringstream unescaped;
+
+	for (size_t i = 0; i < s.length(); i++)
+	{
+		if (s[i] == '&')
+		{
+			// look for ';'
+			std::ostringstream charName;
+			while (i < s.length() && s[i] != ';')
+			{
+				charName << s[i];
+				i++;
+			}
+			unescaped << UnescapeChar(charName.str());
+		}
+		else
+		{
+			unescaped << s[i];
+		}
+	}
+
+	return unescaped.str();
+}
+
+char SonosInterface::UnescapeChar(const std::string& s)
+{
+	char c = '?';
+
+	if (s == "&euro")
+		c = '€';
+	else if (s == "&nbsp")
+		c = ' ';
+	else if (s == "&quot")
+		c = '\"';
+	else if (s == "&amp")
+		c = '&';
+	else if (s == "&lt")
+		c = '<';
+	else if (s == "&gt")
+		c = '>';
+	else if (s == "&iexcl")
+		c = '¡';
+	else if (s == "&cent")
+		c = '¢';
+	else if (s == "&pound")
+		c = '£';
+	else if (s == "&curren")
+		c = '¤';
+	else if (s == "&yen")
+		c = '¥';
+	else if (s == "&brvbar")
+		c = '¦';
+	else if (s == "&sect")
+		c = '§';
+	else if (s == "&copy")
+		c = '©';
+	else if (s == "&reg")
+		c = '®';
+	else if (s == "&deg")
+		c = '°';
+	else if (s == "&plusm")
+		c = '±';
+	else if (s == "&acute")
+		c = '´';
+	else if (s == "&micro")
+		c = 'µ';
+	else
+		LOG("Unexpected escaped char");
+
+	return c;
+}
+
 
 std::string SonosInterface::CreateSoapRequest(const char* endPoint, const char* host, int port, const char* body, const char* action)
 {

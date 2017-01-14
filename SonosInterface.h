@@ -7,6 +7,7 @@
 #include <string>
 #include <list>
 #include <mutex>
+#include <map>
 
 //#define NO_SONOS
 
@@ -41,6 +42,26 @@ public:
 	std::string _name;
 	std::list<std::string> _members; // list of the device UDNs
 	std::string _coordinator; // device UDN
+};
+
+class SonosFavourite
+{
+public:
+
+	SonosFavourite() {}
+	SonosFavourite(const std::string& name, const std::string& url, const std::string& meta)
+		:_name(name), _url(url), _metaData(meta) {}
+
+	SonosFavourite(const SonosFavourite&  f) { *this = f; }
+
+	SonosFavourite& operator=(const SonosFavourite& f)
+	{
+		_name = f._name; _url = f._url; _metaData = f._metaData; return *this;
+	}
+
+	std::string _name;
+	std::string _url;
+	std::string _metaData;
 };
 
 class SonosInterfaceClient
@@ -92,6 +113,7 @@ public:
 	bool PlayBlocking(std::string udn);
 	bool PauseBlocking(std::string id);
 	bool StopBlocking(std::string id);
+	bool PlayFavouriteBlocking(std::string id, std::string fav);
 
 	bool PlayFileFromServerBlocking(std::string room, std::string uri, std::string title);
 
@@ -100,6 +122,10 @@ public:
 	bool GetTransportInfoBlocking(std::string id, TransportState& state);
 	bool GetMediaInfoBlocking(std::string id, std::string& uri);
 	bool GetPositionInfoBlocking(std::string id, bool& tbd);
+	bool GetFavouritesBlocking(std::string id);
+	bool GetFavouritesBlocking(const SonosDevice& dev);
+
+	void GetListOfDevices(std::list<SonosDevice>& list);
 
 protected:
 
@@ -107,6 +133,9 @@ protected:
 
 	std::string FormatMetaData(const char* pTitle);
 	bool MustEscape(char ch, std::string& escaped);
+	std::string UnescapeXml(const std::string& s);
+	char UnescapeChar(const std::string& s);
+	std::string EscapeXml(std::string& s);
 
 	bool ParseUrl(const char* url, std::string& host, int& port, std::string& path);
 	bool ParseZoneTopology(const char* pXml);
@@ -127,13 +156,19 @@ protected:
 
 	void HandleSsdpResponse(const char* resp);
 
+	std::string SonosInterface::UnChunkEncode(std::string s);
+
 	SonosInterfaceClient* _pClient;
 
 	std::thread* _pSearchThread;
 
 	std::list<SonosDevice> _deviceList;
 	std::list<SonosGroup> _groupList;
+	std::map<std::string, SonosFavourite> _favMap;
+
 	std::mutex _listMutex;
+
+	DWORD _lastFavUpdateTime;
 
 	IUPnPDeviceFinderCallback* _pUPnPDeviceFinderCallback;
 	IUPnPDeviceFinder* _pUPnPDeviceFinder;
