@@ -1256,7 +1256,7 @@ bool SonosInterface::SetVolumeBlocking(std::string udn, int volume)
 
 	SonosDevice dev;
 
-	if (!GetDeviceByUdn(udn.c_str(), dev))
+	if (!GetDeviceByNameOrUdn(udn.c_str(), dev))
 		return false;
 
 	std::ostringstream body;
@@ -1271,6 +1271,141 @@ bool SonosInterface::SetVolumeBlocking(std::string udn, int volume)
 	std::string resp;
 
 	return NetworkRequest(dev._address.c_str(), dev._port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
+}
+
+bool SonosInterface::GroupSpeakersBlocking(std::string udn)
+{
+	LOG("Sonos: GROUP SPEAKERS\n");
+
+	SonosDevice coordinator;
+	if (!GetDeviceByNameOrUdn(udn.c_str(), coordinator))
+		return false;
+
+	struct Speaker { std::string address; int port; };
+	std::vector<std::shared_ptr<Speaker>> targets;
+
+	// create a scope for the lock, compile a list of speakers other
+	// than the controller but then do the network stuff whilst not
+	// holding the lock_guard
+	{
+		std::lock_guard<std::mutex> lock(_listMutex);
+
+		for (auto it = _deviceList.begin(); it != _deviceList.end(); it++)
+		{
+			if ((*it)._udn != coordinator._udn)
+			{
+				std::shared_ptr<Speaker> sp(new Speaker);
+				sp->address = (*it)._address;
+				sp->port = (*it)._port;
+				targets.emplace_back(sp);
+			}
+		}
+	}
+
+	// do the following for each of the devices in the list apart from the first
+	// - use that as the device id for the CurrentURI values
+
+	// example grouping:
+	// <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+	// <s:Body>
+	//  <u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+	//   <InstanceID>0</InstanceID>
+	//   <CurrentURI>x-rincon:RINCON_5CAAFD2A5F9601400</CurrentURI>
+	//   <CurrentURIMetaData></CurrentURIMetaData>
+	//  </u:SetAVTransportURI>
+	// </s:Body></s:Envelope>
+
+	// ### NOTE form of controller is: x-rincon:RINCON_5CAAFD2A5F9601400
+
+	LOG("Coordinator: %s\n", coordinator._name.c_str());
+
+	std::string name = coordinator._udn;
+	name.replace(0, 5, "x-rincon:");
+
+	std::ostringstream body;
+	body << R"(<u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID>)"
+		<< "<CurrentURI>" << name << "</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>"
+		"</u:SetAVTransportURI>";
+
+	bool ok = true;
+
+	for (std::shared_ptr<Speaker>& s : targets)
+	{
+		LOG("Setting URI of %s to: %s\n", s->address.c_str(), name);
+
+		std::string req = CreateSoapRequest(AvTransportEndPoint,
+			s->address.c_str(), s->port,
+			body.str().c_str(),
+			"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI");
+
+		std::string resp;
+
+		ok = ok && NetworkRequest(s->address.c_str(), s->port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
+
+		if (!ok)
+			LOG("%s\n", resp.c_str());
+	}
+
+	return ok;
+}
+
+bool SonosInterface::UngroupSpeakersBlocking()
+{
+	LOG("Sonos: UNGROUP SPEAKERS\n");
+
+	//<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+	//<s:Body>
+	// <u:BecomeCoordinatorOfStandaloneGroup xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+	//  <InstanceID>0</InstanceID>
+	// </u:BecomeCoordinatorOfStandaloneGroup>
+	//</s:Body>
+	//</s:Envelope>
+
+	// simply send the above to all speakers
+	// compile a list using the lock_guard then do the network commands
+	// outside it
+
+	struct Speaker { std::string address; int port; };
+	std::vector<std::shared_ptr<Speaker>> targets;
+
+	// create a scope for the lock, compile a list of speakers other
+	// than the controller but then do the network stuff whilst not
+	// holding the lock_guard
+	{
+		std::lock_guard<std::mutex> lock(_listMutex);
+
+		for (auto it = _deviceList.begin(); it != _deviceList.end(); it++)
+		{
+				std::shared_ptr<Speaker> sp(new Speaker);
+				sp->address = (*it)._address;
+				sp->port = (*it)._port;
+				targets.emplace_back(sp);
+		}
+	}
+
+	std::string body = 
+		R"(<u:BecomeCoordinatorOfStandaloneGroup xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID></u:BecomeCoordinatorOfStandaloneGroup>)";
+
+	bool ok = true;
+
+	for (std::shared_ptr<Speaker>& s : targets)
+	{
+		LOG("Ungrouping %s\n", s->address.c_str());
+
+		std::string req = CreateSoapRequest(AvTransportEndPoint,
+			s->address.c_str(), s->port,
+			body.c_str(),
+			"urn:schemas-upnp-org:service:AVTransport:1#BecomeCoordinatorOfStandaloneGroup");
+
+		std::string resp;
+
+		ok = ok && NetworkRequest(s->address.c_str(), s->port, "/MediaRenderer/AVTransport/Control", resp, req.c_str());
+
+		if (!ok)
+			LOG("%s\n", resp.c_str());
+	}
+
+	return ok;
 }
 
 bool SonosInterface::PlayFileFromServerBlocking(std::string speaker, std::string uri, std::string title)

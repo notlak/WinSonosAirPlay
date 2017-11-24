@@ -96,6 +96,44 @@ void HttpControlServer::OnRequest(NetworkServerConnection& connection, NetworkRe
 	{
 		OnGetDevicesCommand(connection, request);
 	}
+	else if (request.path.substr(0, 10) == "/volumeup/")
+	{
+		if (!OnVolumeUpCommand(connection, request))
+			SendBadResponse(connection, "Error");
+		else
+			SendGoodResponse(connection, "OK");
+	}
+	else if (request.path.substr(0, 12) == "/volumedown/")
+	{
+		if (!OnVolumeDownCommand(connection, request))
+			SendBadResponse(connection, "Error");
+		else
+			SendGoodResponse(connection, "OK");
+	}
+	else if (request.path.substr(0, 11) == "/setvolume/")
+	{
+		if (!OnSetVolumeCommand(connection, request))
+			SendBadResponse(connection, "Error");
+		else
+			SendGoodResponse(connection, "OK");
+
+	}
+	else if (request.path.substr(0, 7) == "/group/")
+	{
+		if (!OnGroupCommand(connection, request))
+			SendBadResponse(connection, "Error");
+		else
+			SendGoodResponse(connection, "OK");
+
+	}
+	else if (request.path.substr(0, 9) == "/ungroup/")
+	{
+		if (!OnUngroupCommand(connection, request))
+			SendBadResponse(connection, "Error");
+		else
+			SendGoodResponse(connection, "OK");
+
+	}
 	else
 	{
 		SendGoodResponse(connection, "Sonos HTTP Control Server");
@@ -317,6 +355,133 @@ bool HttpControlServer::OnPlayCommand(NetworkServerConnection& connection, Netwo
 	return success;
 }
 
+bool HttpControlServer::OnVolumeUpCommand(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	bool success = false;
+
+	std::vector<std::string> pathParts = Split(request.path, '/');
+
+	// we're here because request.path[0..9] = '/volumeup/'
+
+	if (request.type == "GET" && pathParts.size() > 1)
+	{
+		std::string speaker = pathParts[1]; // 0 will be "volumeup"
+											//[ speaker "ALL" = all speakers ] ### TODO!
+
+		// get the curent volume
+
+		int vol = 0;
+		if (!SonosInterface::GetInstance()->GetVolumeBlocking(speaker, vol))
+			return false;
+
+		// now increase by 10%
+
+		vol += 10;
+
+		if (vol > 90) vol = 90;
+
+		success = SonosInterface::GetInstance()->SetVolumeBlocking(speaker, vol);
+	}
+	else
+	{
+		// ### todo: POST
+	}
+
+	return success;
+}
+
+bool HttpControlServer::OnVolumeDownCommand(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	bool success = false;
+
+	std::vector<std::string> pathParts = Split(request.path, '/');
+
+	// we're here because request.path[0..11] = '/volumedown/'
+
+	if (request.type == "GET" && pathParts.size() > 1)
+	{
+		std::string speaker = pathParts[1]; // 0 will be "volumedown"
+											//[ speaker "ALL" = all speakers ] ### TODO!
+
+		// get the curent volume
+
+		int vol = 0;
+		if (!SonosInterface::GetInstance()->GetVolumeBlocking(speaker, vol))
+			return false;
+
+		// now decrease by 10%
+
+		vol -= 10;
+
+		if (vol < 0) vol = 0;
+
+		success = SonosInterface::GetInstance()->SetVolumeBlocking(speaker, vol);
+	}
+	else
+	{
+		// ### todo: POST
+	}
+
+	return success;
+}
+
+bool HttpControlServer::OnSetVolumeCommand(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	bool success = false;
+
+	std::vector<std::string> pathParts = Split(request.path, '/');
+
+	// we're here because request.path[0..10] = '/setvolume/'
+
+	if (request.type == "GET" && pathParts.size() > 2)
+	{
+		std::string speaker = pathParts[1]; // 0 will be "setvolume"
+											//[ speaker "ALL" = all speakers ] ### TODO!
+
+		int vol = atoi(pathParts[2].c_str());
+
+		if (vol < 0 || vol > 100) // don't do anything if an unexpected (non percentage) number given
+			return false;
+
+		if (vol > 90) vol = 90; // set an arbitrary limit of 90%
+			
+		success = SonosInterface::GetInstance()->SetVolumeBlocking(speaker, vol);
+	}
+	else
+	{
+		// ### todo: POST
+	}
+
+	return success;
+}
+
+bool HttpControlServer::OnGroupCommand(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	bool success = false;
+
+	std::vector<std::string> pathParts = Split(request.path, '/');
+
+	// we're here because request.path[0..10] = '/setvolume/'
+
+	if (request.type == "GET" && pathParts.size() > 1)
+	{
+		std::string speaker = pathParts[1]; // 0 will be "group"
+
+		success = SonosInterface::GetInstance()->GroupSpeakersBlocking(speaker);
+	}
+	else
+	{
+		// ### todo: POST
+	}
+
+	return success;
+}
+
+bool HttpControlServer::OnUngroupCommand(NetworkServerConnection& connection, NetworkRequest& request)
+{
+	return SonosInterface::GetInstance()->UngroupSpeakersBlocking();
+}
+
 
 bool HttpControlServer::OnTestCommand(NetworkServerConnection& connection, NetworkRequest& request)
 {
@@ -343,6 +508,11 @@ bool HttpControlServer::OnPlayFavCommand(NetworkServerConnection& connection, Ne
 		return false;
 
 	std::string fav = UnescapeText(pathParts[2]);
+
+	// set the volumet to 25% first
+
+	if (!SonosInterface::GetInstance()->SetVolumeBlocking(pathParts[1], 25))
+		return false;
 
 	return SonosInterface::GetInstance()->PlayFavouriteBlocking(pathParts[1], fav);
 

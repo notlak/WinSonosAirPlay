@@ -33,6 +33,11 @@ protected:
 	bool OnPlayFavCommand(NetworkServerConnection& connection, NetworkRequest& request);
 	bool OnPlayCommand(NetworkServerConnection& connection, NetworkRequest& request);
 	bool OnGetDevicesCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnVolumeUpCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnVolumeDownCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnSetVolumeCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnGroupCommand(NetworkServerConnection& connection, NetworkRequest& request);
+	bool OnUngroupCommand(NetworkServerConnection& connection, NetworkRequest& request);
 
 	// method to handle request from sonos
 	bool OnServeTts(NetworkServerConnection& connection, NetworkRequest& request);

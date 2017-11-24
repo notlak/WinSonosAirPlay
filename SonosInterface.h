@@ -114,6 +114,8 @@ public:
 	bool PauseBlocking(std::string id);
 	bool StopBlocking(std::string id);
 	bool PlayFavouriteBlocking(std::string id, std::string fav);
+	bool GroupSpeakersBlocking(std::string udn);
+	bool UngroupSpeakersBlocking();
 
 	bool PlayFileFromServerBlocking(std::string room, std::string uri, std::string title);
 
